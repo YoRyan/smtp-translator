@@ -26,17 +26,14 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"net/mail"
-	"net/url"
 	"os"
 	"time"
 
 	"github.com/bradfitz/go-smtpd/smtpd"
+	"github.com/gregdel/pushover"
 )
 
 // An Envelope for tracking state with smtpd. It populates msg and sends itself
@@ -96,28 +93,21 @@ func (e *StoredEnvelope) Recipients() string {
 }
 
 // Submit a finalized Envelope to Pushover.
-func SendPushover(e *StoredEnvelope, token string, user string) error {
+func SendPushover(e *StoredEnvelope, api *pushover.Pushover, dest *pushover.Recipient) (err error, retryable bool) {
 	sub := e.msg.Header.Get("Subject")
 	if sub == "" {
 		sub = "(no subject)"
 	}
 	sndr := e.sndr.Email()
 	rcpts := e.Recipients()
-
-	resp, err := http.PostForm("https://api.pushover.net/1/messages.json",
-		url.Values{
-			"token":   {token},
-			"user":    {user},
-			"message": {string(e.body)},
-			"title":   {sub + " (" + sndr + " to " + rcpts + ")"}})
+	title := sub + " (" + sndr + " to " + rcpts + ")"
+	resp, err := api.SendMessage(pushover.NewMessageWithTitle(string(e.body), title), dest)
 	if err != nil {
-		return nil
+		retryable = resp != nil && resp.Status != 1
+		return
 	}
-	if resp.StatusCode != 200 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return errors.New("bad response from Pushover: [" + resp.Status + "] " + string(body))
-	}
-	return nil
+	retryable = false
+	return
 }
 
 func main() {
@@ -136,17 +126,27 @@ func main() {
 	}
 
 	q := make(chan *StoredEnvelope, 10)
+	push := pushover.New(token)
+	pushRcpt := pushover.NewRecipient(user)
+	_, err := push.GetRecipientDetails(pushRcpt)
+	if err != nil {
+		errlog.Println(err)
+		return
+	}
 	go func() {
 		for {
 			select {
 			case e := <-q:
 				for {
-					err := SendPushover(e, token, user)
-					if err == nil {
-						break
+					err, retry := SendPushover(e, push, pushRcpt)
+					if err != nil && retry {
+						errlog.Println(err, "(retrying in 10 seconds)")
+						time.Sleep(10 * time.Second)
+						continue
+					} else if err != nil {
+						errlog.Println(err, "(not recoverable)")
 					}
-					errlog.Println(err)
-					time.Sleep(30 * time.Second)
+					break
 				}
 			}
 		}
@@ -158,7 +158,7 @@ func main() {
 		OnNewMail: func(c smtpd.Connection, from smtpd.MailAddress) (smtpd.Envelope, error) {
 			return NewStoredEnvelope(q, from), nil
 		}}
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		errlog.Println(err)
 	}
