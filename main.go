@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/mail"
@@ -113,7 +114,8 @@ func SendPushover(e *StoredEnvelope, token string, user string) error {
 		return nil
 	}
 	if resp.StatusCode != 200 {
-		return errors.New("bad response from pushover")
+		body, _ := ioutil.ReadAll(resp.Body)
+		return errors.New("bad response from Pushover: [" + resp.Status + "] " + string(body))
 	}
 	return nil
 }
