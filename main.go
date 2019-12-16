@@ -159,19 +159,17 @@ func main() {
 	}
 	go func() {
 		for {
-			select {
-			case e := <-q:
-				for {
-					err, retry := SendPushover(e, push, pushRcpt)
-					if err != nil && retry {
-						errlog.Println(err, "(retrying in 10 seconds)")
-						time.Sleep(10 * time.Second)
-						continue
-					} else if err != nil {
-						errlog.Println(err, "(not recoverable)")
-					}
-					break
+			var e *Envelope = <-q
+			for {
+				err, retry := SendPushover(e, push, pushRcpt)
+				if err != nil && retry {
+					errlog.Println(err, "(retrying in 10 seconds)")
+					time.Sleep(10 * time.Second)
+					continue
+				} else if err != nil {
+					errlog.Println(err, "(not recoverable)")
 				}
+				break
 			}
 		}
 	}()
