@@ -30,6 +30,7 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -43,35 +44,27 @@ import (
 	"github.com/mhale/smtpd"
 )
 
-type AuthCombo struct {
-	user string
-	pw   string
-}
-
-func ReadAuth(fd *os.File) (auths []AuthCombo, err error) {
+func ReadAuth(fd *os.File) (db map[string]string, err error) {
+	db = make(map[string]string)
 	scanner := bufio.NewScanner(fd)
 	for scanner.Scan() {
 		split := strings.Split(scanner.Text(), ":")
 		if len(split) == 2 {
-			auths = append(auths, AuthCombo{
-				user: split[0],
-				pw:   split[1]})
+			db[split[0]] = split[1]
 		}
 	}
 	err = scanner.Err()
 	return
 }
 
-func AuthPlaintext(db []AuthCombo, user, pw string) bool {
-	for _, ac := range db {
-		if user == ac.user && pw == ac.pw {
-			return true
-		}
-	}
-	return false
+func AuthPlaintext(db map[string]string, user, pw string) bool {
+	return db[user] != "" && db[user] == pw
 }
 
-func AuthCramMd5(db []AuthCombo, user string, mac, chal []byte) (bool, error) {
+func AuthCramMd5(db map[string]string, user string, mac, chal []byte) (bool, error) {
+	if db[user] == "" {
+		return false, nil
+	}
 	// https://en.wikipedia.org/wiki/CRAM-MD5#Protocol
 	rec := make([]byte, hex.DecodedLen(len(mac)))
 	n, err := hex.Decode(rec, mac)
@@ -79,17 +72,10 @@ func AuthCramMd5(db []AuthCombo, user string, mac, chal []byte) (bool, error) {
 		return false, err
 	}
 	rec = rec[:n]
-	for _, ac := range db {
-		if user == ac.user {
-			mac := hmac.New(md5.New, []byte(ac.pw))
-			mac.Write(chal)
-			exp := mac.Sum(nil)
-			if hmac.Equal(exp, rec) {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
+	mymac := hmac.New(md5.New, []byte(db[user]))
+	mymac.Write(chal)
+	exp := mymac.Sum(nil)
+	return hmac.Equal(exp, rec), nil
 }
 
 type Envelope struct {
@@ -120,92 +106,110 @@ func SendPushover(e *Envelope, api *pushover.Pushover, dest *pushover.Recipient)
 	return
 }
 
-func main() {
-	addr := flag.String("listen", ":25", "address:port to listen on")
-	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
-	host := flag.String("hostname", "smtp-translator", "SMTP server hostname")
-	flag.Parse()
-	errlog := log.New(os.Stderr, "", 0)
-	token, ok := os.LookupEnv("PUSHOVER_TOKEN")
-	if !ok {
-		errlog.Println("missing env: $PUSHOVER_TOKEN")
-		return
-	}
-	user, ok := os.LookupEnv("PUSHOVER_USER")
-	if !ok {
-		errlog.Println("missing env: $PUSHOVER_USER")
-		return
-	}
-	var authl []AuthCombo
-	if *authp != "" {
-		authf, err := os.Open(*authp)
-		if err != nil {
-			errlog.Println("couldn't read auth file:", err)
-			return
-		}
-		authl, err = ReadAuth(authf)
-		if err != nil {
-			errlog.Println("couldn't read auth file:", err)
-			return
-		}
-	}
+type Config struct {
+	Addr     string
+	AuthDb   map[string]string
+	Hostname string
 
+	PushoverToken string
+	PushoverRcpt  string
+}
+
+func Run(c *Config, errl *log.Logger) error {
 	q := make(chan *Envelope, 10)
-	push := pushover.New(token)
-	pushRcpt := pushover.NewRecipient(user)
-	if _, err := push.GetRecipientDetails(pushRcpt); err != nil {
-		errlog.Println(err)
-		return
+	api := pushover.New(c.PushoverToken)
+	rcpt := pushover.NewRecipient(c.PushoverRcpt)
+	if _, err := api.GetRecipientDetails(rcpt); err != nil {
+		return err
 	}
 	go func() {
 		for {
 			var e *Envelope = <-q
 			for {
-				err, retry := SendPushover(e, push, pushRcpt)
+				err, retry := SendPushover(e, api, rcpt)
 				if err != nil && retry {
-					errlog.Println(err, "(retrying in 10 seconds)")
+					errl.Println(err, "(retrying in 10 seconds)")
 					time.Sleep(10 * time.Second)
 					continue
 				} else if err != nil {
-					errlog.Println(err, "(not recoverable)")
+					errl.Println(err, "(not recoverable)")
 				}
 				break
 			}
 		}
 	}()
 	server := smtpd.Server{
-		Addr:         *addr,
+		Addr:         c.Addr,
 		Appname:      "smtp-translator",
-		AuthRequired: len(authl) > 0,
-		Hostname:     *host,
+		AuthRequired: len(c.AuthDb) > 0,
+		Hostname:     c.Hostname,
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
-			if len(authl) <= 0 {
+			if len(c.AuthDb) <= 0 {
 				return true, nil
 			}
-			if mechanism == "PLAIN" || mechanism == "LOGIN" {
-				return AuthPlaintext(authl, string(username), string(password)), nil
-			} else if mechanism == "CRAM-MD5" {
-				/* username = username
-				   password = hmac
-				   shared   = challenge
-				   (see github.com/mhale/smtpd/smtpd.go) */
-				return AuthCramMd5(authl, string(username), password, shared)
-			} else {
-				panic(mechanism)
+			switch mechanism {
+			case "PLAIN":
+			case "LOGIN":
+				return AuthPlaintext(c.AuthDb, string(username), string(password)), nil
+			case "CRAM-MD5":
+				// username = username, password = hmac, shared = challenge
+				// (see github.com/mhale/smtpd/smtpd.go)
+				return AuthCramMd5(c.AuthDb, string(username), password, shared)
 			}
+			panic(mechanism)
 		},
 		Handler: func(remoteAddr net.Addr, from string, to []string, data []byte) {
-			var e Envelope
-			e.From = from
-			e.To = to
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
 			if err != nil {
 				return
 			}
-			e.Msg = msg
-			q <- &e
+			q <- &Envelope{
+				From: from,
+				To:   to,
+				Msg:  msg}
 		}}
-	if err := server.ListenAndServe(); err != nil {
-		errlog.Println(err)
+	return server.ListenAndServe()
+}
+
+func main() {
+	errl := log.New(os.Stderr, "", 0)
+	c, err := getConfig()
+	if err != nil {
+		errl.Println(err)
+		return
 	}
+	errl.Println(Run(c, errl))
+}
+
+func getConfig() (*Config, error) {
+	addr := flag.String("listen", ":25", "address:port to listen on")
+	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
+	host := flag.String("hostname", "smtp-translator", "SMTP server hostname")
+	flag.Parse()
+	token, ok := os.LookupEnv("PUSHOVER_TOKEN")
+	if !ok {
+		return nil, errors.New("missing env: $PUSHOVER_TOKEN")
+	}
+	user, ok := os.LookupEnv("PUSHOVER_USER")
+	if !ok {
+		return nil, errors.New("missing env: $PUSHOVER_USER")
+	}
+	var authdb map[string]string
+	if *authp != "" {
+		authf, err := os.Open(*authp)
+		if err != nil {
+			return nil, err
+		}
+		authdb, err = ReadAuth(authf)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Config{
+		Addr:     *addr,
+		AuthDb:   authdb,
+		Hostname: *host,
+
+		PushoverToken: token,
+		PushoverRcpt:  user}, nil
 }
