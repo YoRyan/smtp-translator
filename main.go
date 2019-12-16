@@ -27,16 +27,20 @@ package main
 import (
 	"bufio"
 	"bytes"
-	//"encoding/base64"
+	"crypto/hmac"
+	"crypto/md5"
+	"encoding/hex"
 	"flag"
+	"io/ioutil"
 	"log"
+	"net"
 	"net/mail"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/bradfitz/go-smtpd/smtpd"
 	"github.com/gregdel/pushover"
+	"github.com/mhale/smtpd"
 )
 
 type AuthCombo struct {
@@ -58,71 +62,56 @@ func ReadAuth(fd *os.File) (auths []AuthCombo, err error) {
 	return
 }
 
-// An Envelope for tracking state with smtpd. It populates msg and sends itself
-// to ch when closed.
-type StoredEnvelope struct {
-	body  []byte
-	ch    chan *StoredEnvelope
-	sndr  smtpd.MailAddress
-	rcpts []smtpd.MailAddress
-	msg   *mail.Message
-}
-
-func NewStoredEnvelope(ch chan *StoredEnvelope, from smtpd.MailAddress) *StoredEnvelope {
-	e := new(StoredEnvelope)
-	e.ch = ch
-	e.sndr = from
-	return e
-}
-
-func (e *StoredEnvelope) AddRecipient(rcpt smtpd.MailAddress) error {
-	e.rcpts = append(e.rcpts, rcpt)
-	return nil
-}
-
-func (e *StoredEnvelope) BeginData() error {
-	if len(e.rcpts) == 0 {
-		return smtpd.SMTPError("554 5.5.1 Error: no valid recipients")
-	}
-	return nil
-}
-
-func (e *StoredEnvelope) Write(line []byte) error {
-	e.body = append(e.body, line...)
-	return nil
-}
-
-func (e *StoredEnvelope) Close() error {
-	msg, err := mail.ReadMessage(bytes.NewReader(e.body))
-	if err != nil {
-		return err
-	}
-	e.msg = msg
-	e.ch <- e
-	return nil
-}
-
-// Get a human-readable list of recipients.
-func (e *StoredEnvelope) Recipients() string {
-	var s string
-	for i, ma := range e.rcpts {
-		if i > 0 {
-			s += ", "
+func plaintextAuth(db []AuthCombo, user, pw string) bool {
+	for _, ac := range db {
+		if user == ac.user && pw == ac.pw {
+			return true
 		}
-		s += ma.Email()
 	}
-	return s
+	return false
 }
 
-// Submit a finalized Envelope to Pushover.
-func SendPushover(e *StoredEnvelope, api *pushover.Pushover, dest *pushover.Recipient) (err error, retryable bool) {
-	sub := e.msg.Header.Get("Subject")
+func cramMd5Auth(db []AuthCombo, user string, mac, chal []byte) (bool, error) {
+	// https://en.wikipedia.org/wiki/CRAM-MD5#Protocol
+	rec := make([]byte, hex.DecodedLen(len(mac)))
+	n, err := hex.Decode(rec, mac)
+	if err != nil {
+		return false, err
+	}
+	rec = rec[:n]
+	for _, ac := range db {
+		if user == ac.user {
+			mac := hmac.New(md5.New, []byte(ac.pw))
+			mac.Write(chal)
+			exp := mac.Sum(nil)
+			if hmac.Equal(exp, rec) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+type Envelope struct {
+	From string
+	To   []string
+	Msg  *mail.Message
+}
+
+func SendPushover(e *Envelope, api *pushover.Pushover, dest *pushover.Recipient) (err error, retryable bool) {
+	sub := e.Msg.Header.Get("Subject")
 	if sub == "" {
 		sub = "(no subject)"
 	}
-	title := sub + " (" + e.sndr.Email() + " to " + e.Recipients() + ")"
-	msg := pushover.NewMessageWithTitle(string(e.body), title)
-	resp, err := api.SendMessage(msg, dest)
+	title := sub + " (" + e.From + " to " + strings.Join(e.To, ", ") + ")"
+	body, err := ioutil.ReadAll(e.Msg.Body)
+	if err != nil {
+		retryable = false
+		return
+	}
+
+	push := pushover.NewMessageWithTitle(string(body), title)
+	resp, err := api.SendMessage(push, dest)
 	if err != nil {
 		retryable = resp != nil && resp.Status != 1
 		return
@@ -134,6 +123,7 @@ func SendPushover(e *StoredEnvelope, api *pushover.Pushover, dest *pushover.Reci
 func main() {
 	addr := flag.String("listen", ":25", "address:port to listen on")
 	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
+	host := flag.String("hostname", "smtp-translator", "SMTP server hostname")
 	flag.Parse()
 	errlog := log.New(os.Stderr, "", 0)
 	token, ok := os.LookupEnv("PUSHOVER_TOKEN")
@@ -146,22 +136,24 @@ func main() {
 		errlog.Println("missing env: $PUSHOVER_USER")
 		return
 	}
-	authf, err := os.Open(*authp)
-	if err != nil {
-		errlog.Println("couldn't read auth file:", err)
-		return
-	}
-	auth, err := ReadAuth(authf)
-	if err != nil {
-		errlog.Println("couldn't read auth file:", err)
-		return
+	var authl []AuthCombo
+	if *authp != "" {
+		authf, err := os.Open(*authp)
+		if err != nil {
+			errlog.Println("couldn't read auth file:", err)
+			return
+		}
+		authl, err = ReadAuth(authf)
+		if err != nil {
+			errlog.Println("couldn't read auth file:", err)
+			return
+		}
 	}
 
-	q := make(chan *StoredEnvelope, 10)
+	q := make(chan *Envelope, 10)
 	push := pushover.New(token)
 	pushRcpt := pushover.NewRecipient(user)
-	_, err = push.GetRecipientDetails(pushRcpt)
-	if err != nil {
+	if _, err := push.GetRecipientDetails(pushRcpt); err != nil {
 		errlog.Println(err)
 		return
 	}
@@ -184,14 +176,37 @@ func main() {
 		}
 	}()
 	server := smtpd.Server{
-		Addr:      *addr,
-		Hostname:  "",
-		PlainAuth: false,
-		OnNewMail: func(c smtpd.Connection, from smtpd.MailAddress) (smtpd.Envelope, error) {
-			return NewStoredEnvelope(q, from), nil
+		Addr:         *addr,
+		AuthRequired: len(authl) > 0,
+		Hostname:     *host,
+		AuthHandler: func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
+			if len(authl) <= 0 {
+				return true, nil
+			}
+			if mechanism == "PLAIN" || mechanism == "LOGIN" {
+				return plaintextAuth(authl, string(username), string(password)), nil
+			} else if mechanism == "CRAM-MD5" {
+				/* username = username
+				   password = hmac
+				   shared   = challenge
+				   (see github.com/mhale/smtpd/smtpd.go) */
+				return cramMd5Auth(authl, string(username), password, shared)
+			} else {
+				panic(mechanism)
+			}
+		},
+		Handler: func(remoteAddr net.Addr, from string, to []string, data []byte) {
+			var e Envelope
+			e.From = from
+			e.To = to
+			msg, err := mail.ReadMessage(bytes.NewReader(data))
+			if err != nil {
+				return
+			}
+			e.Msg = msg
+			q <- &e
 		}}
-	err = server.ListenAndServe()
-	if err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		errlog.Println(err)
 	}
 }
