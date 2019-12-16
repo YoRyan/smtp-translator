@@ -25,16 +25,38 @@ SOFTWARE.
 package main
 
 import (
+	"bufio"
 	"bytes"
+	//"encoding/base64"
 	"flag"
 	"log"
 	"net/mail"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bradfitz/go-smtpd/smtpd"
 	"github.com/gregdel/pushover"
 )
+
+type AuthCombo struct {
+	user string
+	pw   string
+}
+
+func ReadAuth(fd *os.File) (auths []AuthCombo, err error) {
+	scanner := bufio.NewScanner(fd)
+	for scanner.Scan() {
+		split := strings.Split(scanner.Text(), ":")
+		if len(split) == 2 {
+			auths = append(auths, AuthCombo{
+				user: split[0],
+				pw:   split[1]})
+		}
+	}
+	err = scanner.Err()
+	return
+}
 
 // An Envelope for tracking state with smtpd. It populates msg and sends itself
 // to ch when closed.
@@ -98,10 +120,9 @@ func SendPushover(e *StoredEnvelope, api *pushover.Pushover, dest *pushover.Reci
 	if sub == "" {
 		sub = "(no subject)"
 	}
-	sndr := e.sndr.Email()
-	rcpts := e.Recipients()
-	title := sub + " (" + sndr + " to " + rcpts + ")"
-	resp, err := api.SendMessage(pushover.NewMessageWithTitle(string(e.body), title), dest)
+	title := sub + " (" + e.sndr.Email() + " to " + e.Recipients() + ")"
+	msg := pushover.NewMessageWithTitle(string(e.body), title)
+	resp, err := api.SendMessage(msg, dest)
 	if err != nil {
 		retryable = resp != nil && resp.Status != 1
 		return
@@ -112,6 +133,7 @@ func SendPushover(e *StoredEnvelope, api *pushover.Pushover, dest *pushover.Reci
 
 func main() {
 	addr := flag.String("listen", ":25", "address:port to listen on")
+	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
 	flag.Parse()
 	errlog := log.New(os.Stderr, "", 0)
 	token, ok := os.LookupEnv("PUSHOVER_TOKEN")
@@ -124,11 +146,21 @@ func main() {
 		errlog.Println("missing env: $PUSHOVER_USER")
 		return
 	}
+	authf, err := os.Open(*authp)
+	if err != nil {
+		errlog.Println("couldn't read auth file:", err)
+		return
+	}
+	auth, err := ReadAuth(authf)
+	if err != nil {
+		errlog.Println("couldn't read auth file:", err)
+		return
+	}
 
 	q := make(chan *StoredEnvelope, 10)
 	push := pushover.New(token)
 	pushRcpt := pushover.NewRecipient(user)
-	_, err := push.GetRecipientDetails(pushRcpt)
+	_, err = push.GetRecipientDetails(pushRcpt)
 	if err != nil {
 		errlog.Println(err)
 		return
