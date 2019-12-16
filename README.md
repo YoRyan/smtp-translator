@@ -13,4 +13,4 @@ ryan:hunter2
 trump:letmein
 ```
 
-A valid login will then be required to submit any messages. Provide username and passwords to your SMTP clients as you would for any SMTP server that requires authentication. Clients must support the CRAM-MD5 authentication method, which does not reveal passwords in transit.
+A valid login will then be required to submit any messages. Provide usernames and passwords to your SMTP clients as you would for any SMTP server that requires authentication. Clients must support the CRAM-MD5 authentication method, which does not reveal passwords in transit.
