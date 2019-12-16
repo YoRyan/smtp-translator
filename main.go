@@ -175,6 +175,7 @@ func main() {
 	}()
 	server := smtpd.Server{
 		Addr:         *addr,
+		Appname:      "smtp-translator",
 		AuthRequired: len(authl) > 0,
 		Hostname:     *host,
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
