@@ -62,7 +62,7 @@ func ReadAuth(fd *os.File) (auths []AuthCombo, err error) {
 	return
 }
 
-func plaintextAuth(db []AuthCombo, user, pw string) bool {
+func AuthPlaintext(db []AuthCombo, user, pw string) bool {
 	for _, ac := range db {
 		if user == ac.user && pw == ac.pw {
 			return true
@@ -71,7 +71,7 @@ func plaintextAuth(db []AuthCombo, user, pw string) bool {
 	return false
 }
 
-func cramMd5Auth(db []AuthCombo, user string, mac, chal []byte) (bool, error) {
+func AuthCramMd5(db []AuthCombo, user string, mac, chal []byte) (bool, error) {
 	// https://en.wikipedia.org/wiki/CRAM-MD5#Protocol
 	rec := make([]byte, hex.DecodedLen(len(mac)))
 	n, err := hex.Decode(rec, mac)
@@ -182,13 +182,13 @@ func main() {
 				return true, nil
 			}
 			if mechanism == "PLAIN" || mechanism == "LOGIN" {
-				return plaintextAuth(authl, string(username), string(password)), nil
+				return AuthPlaintext(authl, string(username), string(password)), nil
 			} else if mechanism == "CRAM-MD5" {
 				/* username = username
 				   password = hmac
 				   shared   = challenge
 				   (see github.com/mhale/smtpd/smtpd.go) */
-				return cramMd5Auth(authl, string(username), password, shared)
+				return AuthCramMd5(authl, string(username), password, shared)
 			} else {
 				panic(mechanism)
 			}
