@@ -16,7 +16,7 @@ $ sudo smtp-translator
 Optionally, you can specify your own listening address and advertised hostname.
 
 ```
-$ smtp-translator -listen 127.0.0.1:2525 -hostname My-Host-Not-Root
+$ smtp-translator -addr 127.0.0.1:2525 -hostname My-Host-Not-Root
 ```
 
 ### Enabling TLS
@@ -45,7 +45,7 @@ ryan:hunter2
 trump:letmein
 EOF
 $ chmod 600 mycreds.txt
-$ smtp-translator -listen :2525 -auth mycreds.txt
+$ smtp-translator -addr :2525 -auth mycreds.txt
 ```
 
 A valid login will then be required to submit any messages. Provide usernames and passwords to your SMTP clients as you would for any SMTP server that requires authentication. If not using TLS, clients must support the CRAM-MD5 authentication method so that they do not reveal passwords in transit.

@@ -219,7 +219,7 @@ func main() {
 }
 
 func getConfig() (*Config, error) {
-	addr := flag.String("listen", ":25", "address:port to listen on")
+	addr := flag.String("addr", ":25", "address:port to listen on")
 	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
 	host := flag.String("hostname", "smtp-translator", "advertise an SMTP server hostname")
 	tlsCert := flag.String("tls-cert", "", "if using TLS, path to TLS certificate file")
