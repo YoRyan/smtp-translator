@@ -107,9 +107,13 @@ func SendPushover(e *Envelope, api *pushover.Pushover, dest *pushover.Recipient)
 }
 
 type Config struct {
-	Addr     string
-	AuthDb   map[string]string
-	Hostname string
+	Addr        string
+	AuthDb      map[string]string
+	Hostname    string
+	TlsCert     string
+	TlsKey      string
+	Starttls    bool
+	StarttlsReq bool
 
 	PushoverToken string
 	PushoverRcpt  string
@@ -122,27 +126,13 @@ func Run(c *Config, errl *log.Logger) error {
 	if _, err := api.GetRecipientDetails(rcpt); err != nil {
 		return err
 	}
-	go func() {
-		for {
-			var e *Envelope = <-q
-			for {
-				err, retry := SendPushover(e, api, rcpt)
-				if err != nil && retry {
-					errl.Println(err, "(retrying in 10 seconds)")
-					time.Sleep(10 * time.Second)
-					continue
-				} else if err != nil {
-					errl.Println(err, "(not recoverable)")
-				}
-				break
-			}
-		}
-	}()
 	server := smtpd.Server{
 		Addr:         c.Addr,
 		Appname:      "smtp-translator",
 		AuthRequired: len(c.AuthDb) > 0,
 		Hostname:     c.Hostname,
+		TLSListener:  !c.Starttls && !c.StarttlsReq,
+		TLSRequired:  c.StarttlsReq,
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
 			if len(c.AuthDb) <= 0 {
 				return true, nil
@@ -168,6 +158,27 @@ func Run(c *Config, errl *log.Logger) error {
 				To:   to,
 				Msg:  msg}
 		}}
+	if c.TlsCert != "" && c.TlsKey != "" {
+		if err := server.ConfigureTLS(c.TlsCert, c.TlsKey); err != nil {
+			return err
+		}
+	}
+	go func() {
+		for {
+			var e *Envelope = <-q
+			for {
+				err, retry := SendPushover(e, api, rcpt)
+				if err != nil && retry {
+					errl.Println(err, "(retrying in 10 seconds)")
+					time.Sleep(10 * time.Second)
+					continue
+				} else if err != nil {
+					errl.Println(err, "(not recoverable)")
+				}
+				break
+			}
+		}
+	}()
 	return server.ListenAndServe()
 }
 
@@ -184,8 +195,22 @@ func main() {
 func getConfig() (*Config, error) {
 	addr := flag.String("listen", ":25", "address:port to listen on")
 	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
-	host := flag.String("hostname", "smtp-translator", "SMTP server hostname")
+	host := flag.String("hostname", "smtp-translator", "advertise an SMTP server hostname")
+	tlsCert := flag.String("tls-cert", "", "if using TLS, path to TLS certificate file")
+	tlsKey := flag.String("tls-key", "", "if using TLS, path to TLS key file")
+	starttls := flag.Bool("starttls", false, "if using TLS, accept unencrypted connections that may upgrade with STARTTLS")
+	starttlsReq := flag.Bool("starttls-always", false, "if using TLS, accept unencrypted connections that MUST upgrade with STARTTLS")
 	flag.Parse()
+
+	if (*tlsCert != "" || *tlsKey != "") && (*tlsCert == "" || *tlsKey == "") {
+		return nil, errors.New("must specify both -tls-cert and -tls-key")
+	}
+	if *starttls && *starttlsReq {
+		return nil, errors.New("must specify either -starttls or -starttls-always")
+	}
+	if (*starttls || *starttlsReq) && (*tlsCert == "" || *tlsKey == "") {
+		return nil, errors.New("must specify -tls-cert and -tls-key to use TLS")
+	}
 	token, ok := os.LookupEnv("PUSHOVER_TOKEN")
 	if !ok {
 		return nil, errors.New("missing env: $PUSHOVER_TOKEN")
@@ -194,6 +219,7 @@ func getConfig() (*Config, error) {
 	if !ok {
 		return nil, errors.New("missing env: $PUSHOVER_USER")
 	}
+
 	var authdb map[string]string
 	if *authp != "" {
 		authf, err := os.Open(*authp)
@@ -205,10 +231,15 @@ func getConfig() (*Config, error) {
 			return nil, err
 		}
 	}
+
 	return &Config{
-		Addr:     *addr,
-		AuthDb:   authdb,
-		Hostname: *host,
+		Addr:        *addr,
+		AuthDb:      authdb,
+		Hostname:    *host,
+		TlsCert:     *tlsCert,
+		TlsKey:      *tlsKey,
+		Starttls:    *starttls,
+		StarttlsReq: *starttlsReq,
 
 		PushoverToken: token,
 		PushoverRcpt:  user}, nil
