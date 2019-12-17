@@ -219,13 +219,20 @@ func main() {
 }
 
 func getConfig() (*Config, error) {
-	addr := flag.String("addr", ":25", "address:port to listen on")
-	authp := flag.String("auth", "", "authenticate senders with username:password combinations from `file`")
-	host := flag.String("hostname", "smtp-translator", "advertise an SMTP server hostname")
-	tlsCert := flag.String("tls-cert", "", "if using TLS, path to TLS certificate file")
-	tlsKey := flag.String("tls-key", "", "if using TLS, path to TLS key file")
-	starttls := flag.Bool("starttls", false, "if using TLS, accept unencrypted connections that may upgrade with STARTTLS")
-	starttlsReq := flag.Bool("starttls-always", false, "if using TLS, accept unencrypted connections that MUST upgrade with STARTTLS")
+	addr := flag.String("addr", ":25",
+		"address:port to listen on")
+	authp := flag.String("auth", "",
+		"authenticate senders with username:password combinations from `file`")
+	host := flag.String("hostname", "smtp-translator",
+		"advertise an SMTP server hostname")
+	tlsCert := flag.String("tls-cert", "",
+		"if using TLS, path to TLS certificate file")
+	tlsKey := flag.String("tls-key", "",
+		"if using TLS, path to TLS key file")
+	starttls := flag.Bool("starttls", false,
+		"if using TLS, accept unencrypted connections that may upgrade with STARTTLS")
+	starttlsReq := flag.Bool("starttls-always", false,
+		"if using TLS, accept unencrypted connections that MUST upgrade with STARTTLS")
 	flag.Parse()
 
 	if (*tlsCert != "" || *tlsKey != "") && (*tlsCert == "" || *tlsKey == "") {
