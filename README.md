@@ -1,14 +1,15 @@
 # SMTP Translator
 
-[Pushover](https://pushover.net) is a useful service, but email notification via SMTP remains the standard for Unix daemons, Internet of Things, and embedded devices. SMTP Translator bridges the gap by receiving emails via SMTP and converting them into Pushover notifications, providing a simpler and more secure alternative to replicating your Gmail password on all of your systems. All emails reach your feed regardless of who sent them or to whom they were addressed - in fact, you can make up your own imaginary email addresses, since they are isolated from the global email system. You can run SMTP Translator on your personal intranet or, after first enabling TLS and authentication, on a public server on the Internet.
+[Pushover](https://pushover.net) is a useful service, but email notification via SMTP remains the standard for Unix daemons, Internet of Things, and embedded devices. SMTP Translator bridges the gap by receiving emails via SMTP and converting them into Pushover notifications, providing a simpler and more secure alternative to replicating your Gmail password on all of your systems.
+
+You send an email to SMTP Translator as you would any SMTP server, with a recipient email in the format **(your user key here)@api.pushover.net**. (Unfortunately, it is not possible to mimic the [newer, shorter](https://blog.pushover.net/posts/new-e-mail-gateway-features) email gateway addresses.) Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system - and if you run SMTP Translator with TLS, this approach also has the side benefit of encrypting everything in transit. You can run SMTP Translator on your personal intranet or, after first enabling TLS and authentication, on a public server on the Internet.
 
 ## Usage
 
-At a minimum you need to specify your Pushover tokens in the `PUSHOVER_TOKEN` and `PUSHOVER_USER` environment variables.
+At a minimum you need to specify your Pushover app token in the `PUSHOVER_TOKEN` environment variable.
 
 ```
 $ export PUSHOVER_TOKEN=xxx
-$ export PUSHOVER_USER=xxx
 $ sudo smtp-translator
 ```
 
