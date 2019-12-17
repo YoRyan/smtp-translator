@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
+from os import environ
 from smtplib import SMTP
 
 
-sender = 'ryan@youngryan.com'
-receivers = ['trump@whitehouse.gov']
+sender = 'trump@whitehouse.gov'
+receivers = [f'{environ["PUSHOVER_USER"]}@api.pushover.net']
 
 message = """Subject: Test email
 

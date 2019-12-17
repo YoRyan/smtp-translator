@@ -80,24 +80,30 @@ func AuthCramMd5(db map[string]string, user string, mac, chal []byte) (bool, err
 
 type Envelope struct {
 	From string
-	To   []string
+	To   string
 	Msg  *mail.Message
 }
 
-func SendPushover(e *Envelope, api *pushover.Pushover, dest *pushover.Recipient) (err error, retryable bool) {
+func SendPushover(e *Envelope, api *pushover.Pushover) (err error, retryable bool) {
 	sub := e.Msg.Header.Get("Subject")
 	if sub == "" {
 		sub = "(no subject)"
 	}
-	title := sub + " (" + e.From + " to " + strings.Join(e.To, ", ") + ")"
 	body, err := ioutil.ReadAll(e.Msg.Body)
 	if err != nil {
 		retryable = false
 		return
 	}
+	user, _ := parseEmail(e.To)
+	rcpt := pushover.NewRecipient(user)
+	_, err = api.GetRecipientDetails(rcpt)
+	if err != nil {
+		retryable = false
+		return
+	}
 
-	push := pushover.NewMessageWithTitle(string(body), title)
-	resp, err := api.SendMessage(push, dest)
+	push := pushover.NewMessageWithTitle(string(body), sub+" ("+e.From+")")
+	resp, err := api.SendMessage(push, rcpt)
 	if err != nil {
 		retryable = resp != nil && resp.Status != 1
 		return
@@ -122,10 +128,6 @@ type Config struct {
 func Run(c *Config, errl *log.Logger) error {
 	q := make(chan *Envelope, 10)
 	api := pushover.New(c.PushoverToken)
-	rcpt := pushover.NewRecipient(c.PushoverRcpt)
-	if _, err := api.GetRecipientDetails(rcpt); err != nil {
-		return err
-	}
 	server := smtpd.Server{
 		Addr:         c.Addr,
 		Appname:      "smtp-translator",
@@ -138,8 +140,7 @@ func Run(c *Config, errl *log.Logger) error {
 				return true, nil
 			}
 			switch mechanism {
-			case "PLAIN":
-			case "LOGIN":
+			case "PLAIN", "LOGIN":
 				return AuthPlaintext(c.AuthDb, string(username), string(password)), nil
 			case "CRAM-MD5":
 				// username = username, password = hmac, shared = challenge
@@ -148,15 +149,32 @@ func Run(c *Config, errl *log.Logger) error {
 			}
 			panic(mechanism)
 		},
+		HandlerRcpt: func(remoteAddr net.Addr, from string, to string) bool {
+			_, dom := parseEmail(to)
+			switch dom {
+			case "api.pushover.net", "pomail.net":
+				return true
+			default:
+				return false
+			}
+		},
 		Handler: func(remoteAddr net.Addr, from string, to []string, data []byte) {
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
 			if err != nil {
 				return
 			}
-			q <- &Envelope{
-				From: from,
-				To:   to,
-				Msg:  msg}
+			for _, rcpt := range to {
+				_, dom := parseEmail(rcpt)
+				switch dom {
+				case "api.pushover.net", "pomail.net":
+					q <- &Envelope{
+						From: from,
+						To:   rcpt,
+						Msg:  msg}
+				default:
+					errl.Println("bad domain in address:", dom)
+				}
+			}
 		}}
 	if c.TlsCert != "" && c.TlsKey != "" {
 		if err := server.ConfigureTLS(c.TlsCert, c.TlsKey); err != nil {
@@ -167,7 +185,7 @@ func Run(c *Config, errl *log.Logger) error {
 		for {
 			var e *Envelope = <-q
 			for {
-				err, retry := SendPushover(e, api, rcpt)
+				err, retry := SendPushover(e, api)
 				if err != nil && retry {
 					errl.Println(err, "(retrying in 10 seconds)")
 					time.Sleep(10 * time.Second)
@@ -180,6 +198,14 @@ func Run(c *Config, errl *log.Logger) error {
 		}
 	}()
 	return server.ListenAndServe()
+}
+
+func parseEmail(addr string) (user string, dom string) {
+	spl := strings.SplitN(addr, "@", 2)
+	if len(spl) != 2 {
+		return "", ""
+	}
+	return spl[0], spl[1]
 }
 
 func main() {
@@ -215,10 +241,6 @@ func getConfig() (*Config, error) {
 	if !ok {
 		return nil, errors.New("missing env: $PUSHOVER_TOKEN")
 	}
-	user, ok := os.LookupEnv("PUSHOVER_USER")
-	if !ok {
-		return nil, errors.New("missing env: $PUSHOVER_USER")
-	}
 
 	var authdb map[string]string
 	if *authp != "" {
@@ -241,6 +263,5 @@ func getConfig() (*Config, error) {
 		Starttls:    *starttls,
 		StarttlsReq: *starttlsReq,
 
-		PushoverToken: token,
-		PushoverRcpt:  user}, nil
+		PushoverToken: token}, nil
 }
