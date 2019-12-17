@@ -7,7 +7,7 @@ You send an email to SMTP Translator as you would any SMTP server, with a recipi
 ## Install
 
 ```
-$ go get github.com/YoRyan/smtp-translator
+$ go get -u github.com/YoRyan/smtp-translator
 ```
 
 ## Usage
