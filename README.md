@@ -20,7 +20,7 @@ $ smtp-translator -listen 127.0.0.1:2525 -hostname My-Host-Not-Root
 
 ### Enabling TLS
 
-Quickly generate your own cert:
+To quickly generate your own cert:
 
 ```
 openssl req -newkey rsa:4096 -nodes -sha512 -x509 -days 3650 -nodes -out mycert.pem -keyout mycert.key
