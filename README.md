@@ -78,6 +78,7 @@ define(`SMART_HOST', `your.server.host.here')dnl
 define(`RELAY_MAILER', `esmtp')dnl
 define(`RELAY_MAILER_ARGS', `TCP $h 587')dnl
 define(`confAUTH_MECHANISMS', `CRAM-MD5')dnl
+FEATURE(`authinfo')
 ```
 
 ```
