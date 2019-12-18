@@ -6,11 +6,11 @@
 
 To use SMTP Translator, just set your SMTP forwader to `smtpt.app.youngryan.com` and send an email to `<your user key here>@api.pushover.net`. (Unfortunately, it is not possible to mimic the [newer, shorter](https://blog.pushover.net/posts/new-e-mail-gateway-features) email gateway addresses.) Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system.
 
-### Q: What's the catch?
+##### Q: What's the catch?
 
 No catch. I promise that the code on this repository is what I run on my server, and that I do not log messages or metadata. If you like, of course, you are free to get your own app token and host your own instance.
 
-### Q: Does `smtpt.app.youngryan.com` support encryption?
+##### Q: Does `smtpt.app.youngryan.com` support encryption?
 
 Yes. To use TLS encryption, make note of the following table:
 
@@ -22,7 +22,7 @@ Yes. To use TLS encryption, make note of the following table:
 
 In theory, I could still read your messages. Email, by its nature, cannot be end-to-end encrypted.
 
-### Q: Help! My message didn't go through!
+##### Q: Help! My message didn't go through!
 
 Double-check the token in your recipient address - it is easy to confuse an app token for a user or group token. And make sure your message is at most 1024 characters long, per the Pushover [API limit](https://pushover.net/api#limits).
 
