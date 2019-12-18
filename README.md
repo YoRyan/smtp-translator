@@ -1,3 +1,5 @@
+![SMTP Translator icon](https://raw.githubusercontent.com/wiki/YoRyan/smtp-translator/header_icon.png)
+
 # SMTP Translator
 
 [Pushover](https://pushover.net) is a useful service, but email notification via SMTP remains the standard for Unix daemons, Internet of Things, and embedded devices. SMTP Translator bridges the gap by receiving emails via SMTP and converting them into Pushover notifications, providing a simpler and more secure alternative to replicating your Gmail password on all of your systems.
