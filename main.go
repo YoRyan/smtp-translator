@@ -42,46 +42,17 @@ import (
 	"github.com/mhale/smtpd"
 )
 
-func ReadAuth(fd *os.File) (db map[string]string, err error) {
-	db = make(map[string]string)
-	scanner := bufio.NewScanner(fd)
-	for scanner.Scan() {
-		split := strings.Split(scanner.Text(), ":")
-		if len(split) == 2 {
-			db[split[0]] = split[1]
-		}
-	}
-	err = scanner.Err()
-	return
-}
-
-func AuthPlaintext(db map[string]string, user, pw string) bool {
-	return db[user] != "" && db[user] == pw
-}
-
-func AuthCramMd5(db map[string]string, user string, mac, chal []byte) (bool, error) {
-	if db[user] == "" {
-		return false, nil
-	}
-	// https://en.wikipedia.org/wiki/CRAM-MD5#Protocol
-	rec := make([]byte, hex.DecodedLen(len(mac)))
-	n, err := hex.Decode(rec, mac)
-	if err != nil {
-		return false, err
-	}
-	rec = rec[:n]
-	mymac := hmac.New(md5.New, []byte(db[user]))
-	mymac.Write(chal)
-	exp := mymac.Sum(nil)
-	return hmac.Equal(exp, rec), nil
-}
-
+// An Envelope represents an email that is finalized, parsed, and ready for
+// submission.
 type Envelope struct {
 	From string
 	To   string
 	Msg  *mail.Message
 }
 
+// SendPushover converts an Envelope into a Pushover notification. In the event
+// of an error condition, retryable indicates whether or not the Envelope can be
+// resent.
 func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err error) {
 	sub := e.Msg.Header.Get("Subject")
 	if sub == "" {
@@ -110,6 +81,7 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 	return
 }
 
+// Config holds all parameters for SMTP Translator.
 type Config struct {
 	Addr        string
 	AuthDb      map[string]string
@@ -123,7 +95,9 @@ type Config struct {
 	PushoverRcpt  string
 }
 
-func Run(c *Config, errl *log.Logger) error {
+// ListenAndServe runs an instance of SMTP Translator. It takes a server
+// configuration and a logger for non-fatal errors.
+func ListenAndServe(c *Config, errl *log.Logger) error {
 	q := make(chan *Envelope, 10)
 	api := pushover.New(c.PushoverToken)
 	server := smtpd.Server{
@@ -140,11 +114,11 @@ func Run(c *Config, errl *log.Logger) error {
 			}
 			switch mechanism {
 			case "PLAIN", "LOGIN":
-				return AuthPlaintext(c.AuthDb, string(username), string(password)), nil
+				return authPlaintext(c.AuthDb, string(username), string(password)), nil
 			case "CRAM-MD5":
 				// username = username, password = hmac, shared = challenge
 				// (see github.com/mhale/smtpd/smtpd.go)
-				return AuthCramMd5(c.AuthDb, string(username), password, shared)
+				return authCramMd5(c.AuthDb, string(username), password, shared)
 			}
 			panic(mechanism)
 		},
@@ -199,6 +173,30 @@ func Run(c *Config, errl *log.Logger) error {
 	return server.ListenAndServe()
 }
 
+func authPlaintext(db map[string]string, user, pw string) bool {
+	return db[user] != "" && db[user] == pw
+}
+
+// authCramMd5 implements the CRAM-MD5 SMTP authentication method, which compares
+// a user-submitted HMAC with an expected HMAC that is derived from a shared
+// secret (in SMTP Translator's case, the plaintext password).
+func authCramMd5(db map[string]string, user string, mac, chal []byte) (bool, error) {
+	if db[user] == "" {
+		return false, nil
+	}
+	// https://en.wikipedia.org/wiki/CRAM-MD5#Protocol
+	rec := make([]byte, hex.DecodedLen(len(mac)))
+	n, err := hex.Decode(rec, mac)
+	if err != nil {
+		return false, err
+	}
+	rec = rec[:n]
+	mymac := hmac.New(md5.New, []byte(db[user]))
+	mymac.Write(chal)
+	exp := mymac.Sum(nil)
+	return hmac.Equal(exp, rec), nil
+}
+
 func parseEmail(addr string) (user string, dom string) {
 	spl := strings.SplitN(addr, "@", 2)
 	if len(spl) != 2 {
@@ -214,7 +212,7 @@ func main() {
 		errl.Println(err)
 		return
 	}
-	errl.Println(Run(c, errl))
+	errl.Println(ListenAndServe(c, errl))
 }
 
 func getConfig() (*Config, error) {
@@ -254,7 +252,7 @@ func getConfig() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		authdb, err = ReadAuth(authf)
+		authdb, err = readAuth(authf)
 		if err != nil {
 			return nil, err
 		}
@@ -270,4 +268,17 @@ func getConfig() (*Config, error) {
 		StarttlsReq: *starttlsReq,
 
 		PushoverToken: token}, nil
+}
+
+func readAuth(fd *os.File) (db map[string]string, err error) {
+	db = make(map[string]string)
+	scanner := bufio.NewScanner(fd)
+	for scanner.Scan() {
+		split := strings.Split(scanner.Text(), ":")
+		if len(split) == 2 {
+			db[split[0]] = split[1]
+		}
+	}
+	err = scanner.Err()
+	return
 }
