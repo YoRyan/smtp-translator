@@ -133,6 +133,7 @@ func Run(c *Config, errl *log.Logger) error {
 		Appname:      "smtp-translator",
 		AuthRequired: len(c.AuthDb) > 0,
 		Hostname:     c.Hostname,
+		MaxSize:      1024 * 4, // per https://pushover.net/api#limits
 		TLSListener:  !c.Starttls && !c.StarttlsReq,
 		TLSRequired:  c.StarttlsReq,
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
