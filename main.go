@@ -102,7 +102,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 	api := pushover.New(c.PushoverToken)
 	server := smtpd.Server{
 		Addr:         c.Addr,
-		Appname:      "smtp-translator",
+		Appname:      "SMTP-Translator",
 		AuthRequired: len(c.AuthDb) > 0,
 		Hostname:     c.Hostname,
 		MaxSize:      1024 * 4, // per https://pushover.net/api#limits
@@ -220,7 +220,11 @@ func getConfig() (*Config, error) {
 		"address:port to listen on")
 	authp := flag.String("auth", "",
 		"authenticate senders with username:password combinations from `file`")
-	host := flag.String("hostname", "smtp-translator",
+	oshost, err := os.Hostname()
+	if err != nil {
+		oshost = "localhost"
+	}
+	host := flag.String("hostname", oshost,
 		"advertise an SMTP server hostname")
 	tlsCert := flag.String("tls-cert", "",
 		"if using TLS, path to TLS certificate file")
