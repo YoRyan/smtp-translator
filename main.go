@@ -82,7 +82,7 @@ type Envelope struct {
 	Msg  *mail.Message
 }
 
-func SendPushover(e *Envelope, api *pushover.Pushover) (err error, retryable bool) {
+func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err error) {
 	sub := e.Msg.Header.Get("Subject")
 	if sub == "" {
 		sub = "(no subject)"
@@ -114,8 +114,8 @@ type Config struct {
 	Addr        string
 	AuthDb      map[string]string
 	Hostname    string
-	TlsCert     string
-	TlsKey      string
+	TLSCert     string
+	TLSKey      string
 	Starttls    bool
 	StarttlsReq bool
 
@@ -175,8 +175,8 @@ func Run(c *Config, errl *log.Logger) error {
 				}
 			}
 		}}
-	if c.TlsCert != "" && c.TlsKey != "" {
-		if err := server.ConfigureTLS(c.TlsCert, c.TlsKey); err != nil {
+	if c.TLSCert != "" && c.TLSKey != "" {
+		if err := server.ConfigureTLS(c.TLSCert, c.TLSKey); err != nil {
 			return err
 		}
 	}
@@ -184,7 +184,7 @@ func Run(c *Config, errl *log.Logger) error {
 		for {
 			var e *Envelope = <-q
 			for {
-				err, retry := SendPushover(e, api)
+				retry, err := SendPushover(e, api)
 				if err != nil && retry {
 					errl.Println(err, "(retrying in 10 seconds)")
 					time.Sleep(10 * time.Second)
@@ -264,8 +264,8 @@ func getConfig() (*Config, error) {
 		Addr:        *addr,
 		AuthDb:      authdb,
 		Hostname:    *host,
-		TlsCert:     *tlsCert,
-		TlsKey:      *tlsKey,
+		TLSCert:     *tlsCert,
+		TLSKey:      *tlsKey,
 		Starttls:    *starttls,
 		StarttlsReq: *starttlsReq,
 
