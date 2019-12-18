@@ -253,6 +253,7 @@ func getConfig() (*Config, error) {
 			return nil, err
 		}
 		authdb, err = readAuth(authf)
+		authf.Close()
 		if err != nil {
 			return nil, err
 		}
