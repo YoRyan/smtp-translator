@@ -6,6 +6,8 @@
 
 To use SMTP Translator, just set your SMTP forwader to `smtpt.app.youngryan.com` and send an email to `<your user key here>@api.pushover.net`. (Unfortunately, it is not possible to mimic the [newer, shorter](https://blog.pushover.net/posts/new-e-mail-gateway-features) email gateway addresses.) Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system.
 
+Please note that with SMTP Translator as your sole smarthost, your system will not be able to send email to non-Pushover destinations.
+
 ##### Q: What's the catch?
 
 No catch. I promise that the code on this repository is what I run on my server, and that I do not log messages or metadata. If you like, of course, you are free to get your own app token and host your own instance.
