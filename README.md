@@ -30,7 +30,7 @@ Double-check the token in your recipient address - it is easy to confuse an app 
 
 ### Synology NAS
 
-![Synology configuration screen](https://raw.githubusercontent.com/wiki/YoRyan/smtp-translator/synology.jpg)
+![Synology configuration screen](https://raw.githubusercontent.com/wiki/YoRyan/smtp-translator/synology_config.jpg)
 
 ### exim4 (Debian/Ubuntu)
 
