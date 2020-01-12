@@ -4,7 +4,7 @@
 
 [Pushover](https://pushover.net) is a fantastic service, but email notification via SMTP remains the standard for Unix daemons, Internet of Things, and embedded devices. SMTP Translator bridges the gap by receiving emails via SMTP and converting them into Pushover notifications, providing a simpler and more secure alternative to replicating your Gmail password on all of your systems.
 
-To use SMTP Translator, just set your SMTP forwader to `smtpt.app.youngryan.com` and send an email to `<your user key here>@api.pushover.net`. (Unfortunately, it is not possible to mimic the [newer, shorter](https://blog.pushover.net/posts/new-e-mail-gateway-features) email gateway addresses.) Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system.
+To use SMTP Translator, just set your SMTP forwarder to `smtpt.app.youngryan.com` and send an email to `<your user key here>@api.pushover.net`. (Unfortunately, it is not possible to mimic the [newer, shorter](https://blog.pushover.net/posts/new-e-mail-gateway-features) email gateway addresses.) Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system.
 
 Please note that with SMTP Translator as your sole smarthost, your system will not be able to send email to non-Pushover destinations.
 
