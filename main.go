@@ -247,7 +247,7 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	var r Recipient
 	rcpt = &r
 
-	user := findStringSubmatch(`^(u\w+)((?:[>#!]\w+)*)@`, addr)
+	user := findStringSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+)*)@`, addr)
 	if len(user) == 0 {
 		return
 	}
