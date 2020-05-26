@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Ryan Young
+// Copyright (c) 2019-2020 Ryan Young
 //
 // The MIT License (MIT)
 //
@@ -35,6 +35,8 @@ import (
 	"net"
 	"net/mail"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,8 +48,17 @@ import (
 // submission.
 type Envelope struct {
 	From string
-	To   string
+	To   Recipient
 	Msg  *mail.Message
+}
+
+// A Recipient represents a valid Pushover destination with optional
+// fields to customize the notification.
+type Recipient struct {
+	User     string
+	Device   string
+	Priority int
+	Sound    string
 }
 
 // SendPushover converts an Envelope into a Pushover notification. In the event
@@ -63,15 +74,24 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		retryable = false
 		return
 	}
-	user, _ := parseEmail(e.To)
-	rcpt := pushover.NewRecipient(user)
+	if e.To.User == "" {
+		retryable = false
+		return
+	}
+	rcpt := pushover.NewRecipient(e.To.User)
 	_, err = api.GetRecipientDetails(rcpt)
 	if err != nil {
 		retryable = false
 		return
 	}
 
-	push := pushover.NewMessageWithTitle(string(body), sub+" ("+e.From+")")
+	push := &pushover.Message{
+		Message:    string(body),
+		Title:      sub + " (" + e.From + ")",
+		Priority:   e.To.Priority,
+		DeviceName: e.To.Device,
+		Sound:      e.To.Sound,
+	}
 	resp, err := api.SendMessage(push, rcpt)
 	if err != nil {
 		retryable = resp != nil && resp.Status != 1
@@ -123,13 +143,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			panic(mechanism)
 		},
 		HandlerRcpt: func(remoteAddr net.Addr, from string, to string) bool {
-			_, dom := parseEmail(to)
-			switch dom {
-			case "api.pushover.net", "pomail.net":
-				return true
-			default:
-				return false
-			}
+			return parseRecipient(to).User != ""
 		},
 		Handler: func(remoteAddr net.Addr, from string, to []string, data []byte) {
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
@@ -137,15 +151,14 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 				return
 			}
 			for _, rcpt := range to {
-				_, dom := parseEmail(rcpt)
-				switch dom {
-				case "api.pushover.net", "pomail.net":
+				parsed := parseRecipient(rcpt)
+				if parsed.User != "" {
 					q <- &Envelope{
 						From: from,
-						To:   rcpt,
+						To:   parsed,
 						Msg:  msg}
-				default:
-					errl.Println("bad domain in address:", dom)
+				} else {
+					errl.Println("bad address:", rcpt)
 				}
 			}
 		}}
@@ -197,12 +210,36 @@ func authCramMd5(db map[string]string, user string, mac, chal []byte) (bool, err
 	return hmac.Equal(exp, rec), nil
 }
 
-func parseEmail(addr string) (user string, dom string) {
-	spl := strings.SplitN(addr, "@", 2)
-	if len(spl) != 2 {
-		return "", ""
+func parseRecipient(addr string) (rcpt Recipient) {
+	matches := func(re string, s string) []string {
+		return regexp.MustCompile(re).FindStringSubmatch(s)
 	}
-	return spl[0], spl[1]
+	user := matches(`^(u\w+)((?:[>#!]\w+)*)@`, addr)
+	if len(user) == 0 {
+		return
+	}
+	rcpt.User = user[1]
+	if len(user) == 1 {
+		return
+	}
+	opts := user[2]
+
+	device := matches(`>(\w+)`, opts)
+	if len(device) == 2 {
+		rcpt.Device = device[1]
+	}
+
+	priority := matches(`#(-?\d)`, opts)
+	if len(priority) == 2 {
+		rcpt.Priority, _ = strconv.Atoi(priority[1])
+	}
+
+	sound := matches(`!(\w+)`, opts)
+	if len(sound) == 2 {
+		rcpt.Sound = sound[1]
+	}
+
+	return
 }
 
 func main() {
