@@ -224,12 +224,12 @@ func parseRecipient(addr string) (rcpt Recipient) {
 	}
 	opts := user[2]
 
-	device := matches(`>(\w+)`, opts)
+	device := matches(`>([\w,]+)`, opts)
 	if len(device) == 2 {
 		rcpt.Device = device[1]
 	}
 
-	priority := matches(`#(-?\d)`, opts)
+	priority := matches(`#([-\+]?\d)`, opts)
 	if len(priority) == 2 {
 		rcpt.Priority, _ = strconv.Atoi(priority[1])
 	}
