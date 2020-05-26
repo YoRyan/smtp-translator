@@ -63,10 +63,10 @@ type Sender struct {
 // A Recipient represents a valid Pushover destination with optional
 // fields to customize the notification.
 type Recipient struct {
-	User     string
-	Device   string
-	Priority int
-	Sound    string
+	UserToken string
+	Device    string
+	Priority  int
+	Sound     string
 }
 
 // SendPushover converts an Envelope into a Pushover notification. In the event
@@ -82,11 +82,11 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		retryable = false
 		return
 	}
-	if e.To.User == "" {
+	if e.From.AppToken == "" || e.To.UserToken == "" {
 		retryable = false
 		return
 	}
-	rcpt := pushover.NewRecipient(e.To.User)
+	rcpt := pushover.NewRecipient(e.To.UserToken)
 	_, err = api.GetRecipientDetails(rcpt)
 	if err != nil {
 		retryable = false
@@ -156,7 +156,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			panic(mechanism)
 		},
 		HandlerRcpt: func(remoteAddr net.Addr, from string, to string) bool {
-			return parseRecipient(to).User != ""
+			return parseRecipient(to).UserToken != ""
 		},
 		Handler: func(remoteAddr net.Addr, from string, to []string, data []byte) {
 			parsedSndr := parseSender(from)
@@ -171,7 +171,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			}
 			for _, rcpt := range to {
 				parsedRcpt := parseRecipient(rcpt)
-				if parsedRcpt.User != "" {
+				if parsedRcpt.UserToken != "" {
 					q <- &Envelope{
 						From: parsedSndr,
 						To:   parsedRcpt,
@@ -251,7 +251,7 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	if len(user) == 0 {
 		return
 	}
-	r.User = user[1]
+	r.UserToken = user[1]
 	if len(user) == 1 {
 		return
 	}
