@@ -47,8 +47,8 @@ import (
 // An Envelope represents an email that is finalized, parsed, and ready for
 // submission.
 type Envelope struct {
-	From Sender
-	To   Recipient
+	From *Sender
+	To   *Recipient
 	Msg  *mail.Message
 }
 
@@ -230,22 +230,28 @@ func authCramMd5(db map[string]string, user string, mac, chal []byte) (bool, err
 	return hmac.Equal(exp, rec), nil
 }
 
-func parseSender(addr string) (sndr Sender) {
-	sndr.Address = addr
+func parseSender(addr string) (sndr *Sender) {
+	var s Sender
+	sndr = &s
+
+	s.Address = addr
 	app := findStringSubmatch(`(a\w+)@`, addr)
 	if len(app) == 0 {
 		return
 	}
-	sndr.AppToken = app[1]
+	s.AppToken = app[1]
 	return
 }
 
-func parseRecipient(addr string) (rcpt Recipient) {
+func parseRecipient(addr string) (rcpt *Recipient) {
+	var r Recipient
+	rcpt = &r
+
 	user := findStringSubmatch(`^(u\w+)((?:[>#!]\w+)*)@`, addr)
 	if len(user) == 0 {
 		return
 	}
-	rcpt.User = user[1]
+	r.User = user[1]
 	if len(user) == 1 {
 		return
 	}
@@ -253,17 +259,17 @@ func parseRecipient(addr string) (rcpt Recipient) {
 
 	device := findStringSubmatch(`>([\w,]+)`, opts)
 	if len(device) == 2 {
-		rcpt.Device = device[1]
+		r.Device = device[1]
 	}
 
 	priority := findStringSubmatch(`#([-\+]?\d)`, opts)
 	if len(priority) == 2 {
-		rcpt.Priority, _ = strconv.Atoi(priority[1])
+		r.Priority, _ = strconv.Atoi(priority[1])
 	}
 
 	sound := findStringSubmatch(`!(\w+)`, opts)
 	if len(sound) == 2 {
-		rcpt.Sound = sound[1]
+		r.Sound = sound[1]
 	}
 
 	return
