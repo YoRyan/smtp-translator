@@ -4,7 +4,7 @@
 
 [Pushover](https://pushover.net) is a fantastic service, but email notification via SMTP remains the standard for Unix daemons, Internet of Things, embedded devices, and so forth. SMTP Translator bridges the gap by receiving emails via SMTP and converting them into Pushover notifications, providing a simpler and more secure alternative to replicating your Gmail password on all of your systems.
 
-To use SMTP Translator, just set your SMTP forwarder to `smtpt.app.youngryan.com` and send an email to `<your user key here>@pushover.net`. Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system.
+To use SMTP Translator, just set your SMTP forwarder to `smtpt.app.youngryan.com` and send an email to `(your user key here)@pushover.net`. Then, instead of routing the email to Pushover via the conventional email network, SMTP Translator submits it directly to the Pushover API. You can make up any sender addresses you want, since they never touch the public email system.
 
 You may also insert the following flags directly after your user token to further customize the notification:
 
@@ -75,7 +75,7 @@ Hello, World!
 $ go get -u github.com/YoRyan/smtp-translator
 ```
 
-At a minimum you need to specify your Pushover app token in the `PUSHOVER_TOKEN` environment variable.
+At the minimum, you need to specify your Pushover app token in the `PUSHOVER_TOKEN` environment variable.
 
 ```
 $ export PUSHOVER_TOKEN=xxx
@@ -87,6 +87,10 @@ Optionally, you can specify your own listening address and advertised hostname.
 ```
 $ smtp-translator -addr 127.0.0.1:2525 -hostname My-Host-Not-Root
 ```
+
+### Multiple app token mode
+
+Passing the `-multi` flag will instruct SMTP Translator to read the app token from the sender's email address instead of the environment variable. Thus, by setting the From: field to an email address in the form of `(your app token here)@pushover.net`, senders can specify their own app tokens. You do not need to set `PUSHOVER_TOKEN` in this mode.
 
 ### Enabling TLS
 
