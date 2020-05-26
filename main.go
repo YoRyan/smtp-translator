@@ -47,9 +47,17 @@ import (
 // An Envelope represents an email that is finalized, parsed, and ready for
 // submission.
 type Envelope struct {
-	From string
+	From Sender
 	To   Recipient
 	Msg  *mail.Message
+}
+
+// A Sender represents the source Pushover app token and the original email
+// From: address. In the future, there may be additional fields.
+type Sender struct {
+	AppToken    string
+	Address     string
+	ShowAddress bool
 }
 
 // A Recipient represents a valid Pushover destination with optional
@@ -85,9 +93,15 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		return
 	}
 
+	var title string
+	if e.From.ShowAddress {
+		title = sub + " (" + e.From.Address + ")"
+	} else {
+		title = sub
+	}
 	push := &pushover.Message{
 		Message:    string(body),
-		Title:      sub + " (" + e.From + ")",
+		Title:      title,
 		Priority:   e.To.Priority,
 		DeviceName: e.To.Device,
 		Sound:      e.To.Sound,
@@ -111,15 +125,14 @@ type Config struct {
 	Starttls    bool
 	StarttlsReq bool
 
-	PushoverToken string
-	PushoverRcpt  string
+	AppToken   string
+	MultiToken bool
 }
 
 // ListenAndServe runs an instance of SMTP Translator. It takes a server
 // configuration and a logger for non-fatal errors.
 func ListenAndServe(c *Config, errl *log.Logger) error {
 	q := make(chan *Envelope, 10)
-	api := pushover.New(c.PushoverToken)
 	server := smtpd.Server{
 		Addr:         c.Addr,
 		Appname:      "SMTP-Translator",
@@ -146,16 +159,22 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			return parseRecipient(to).User != ""
 		},
 		Handler: func(remoteAddr net.Addr, from string, to []string, data []byte) {
+			parsedSndr := parseSender(from)
+			if !c.MultiToken {
+				parsedSndr.AppToken = c.AppToken
+				parsedSndr.ShowAddress = true
+			}
+
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
 			if err != nil {
 				return
 			}
 			for _, rcpt := range to {
-				parsed := parseRecipient(rcpt)
-				if parsed.User != "" {
+				parsedRcpt := parseRecipient(rcpt)
+				if parsedRcpt.User != "" {
 					q <- &Envelope{
-						From: from,
-						To:   parsed,
+						From: parsedSndr,
+						To:   parsedRcpt,
 						Msg:  msg}
 				} else {
 					errl.Println("bad address:", rcpt)
@@ -171,6 +190,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 		for {
 			var e *Envelope = <-q
 			for {
+				api := pushover.New(e.From.AppToken)
 				retry, err := SendPushover(e, api)
 				if err != nil && retry {
 					errl.Println(err, "(retrying in 10 seconds)")
@@ -210,11 +230,18 @@ func authCramMd5(db map[string]string, user string, mac, chal []byte) (bool, err
 	return hmac.Equal(exp, rec), nil
 }
 
-func parseRecipient(addr string) (rcpt Recipient) {
-	matches := func(re string, s string) []string {
-		return regexp.MustCompile(re).FindStringSubmatch(s)
+func parseSender(addr string) (sndr Sender) {
+	sndr.Address = addr
+	app := findStringSubmatch(`(a\w+)@`, addr)
+	if len(app) == 0 {
+		return
 	}
-	user := matches(`^(u\w+)((?:[>#!]\w+)*)@`, addr)
+	sndr.AppToken = app[1]
+	return
+}
+
+func parseRecipient(addr string) (rcpt Recipient) {
+	user := findStringSubmatch(`^(u\w+)((?:[>#!]\w+)*)@`, addr)
 	if len(user) == 0 {
 		return
 	}
@@ -224,22 +251,26 @@ func parseRecipient(addr string) (rcpt Recipient) {
 	}
 	opts := user[2]
 
-	device := matches(`>([\w,]+)`, opts)
+	device := findStringSubmatch(`>([\w,]+)`, opts)
 	if len(device) == 2 {
 		rcpt.Device = device[1]
 	}
 
-	priority := matches(`#([-\+]?\d)`, opts)
+	priority := findStringSubmatch(`#([-\+]?\d)`, opts)
 	if len(priority) == 2 {
 		rcpt.Priority, _ = strconv.Atoi(priority[1])
 	}
 
-	sound := matches(`!(\w+)`, opts)
+	sound := findStringSubmatch(`!(\w+)`, opts)
 	if len(sound) == 2 {
 		rcpt.Sound = sound[1]
 	}
 
 	return
+}
+
+func findStringSubmatch(re string, s string) []string {
+	return regexp.MustCompile(re).FindStringSubmatch(s)
 }
 
 func main() {
@@ -255,6 +286,8 @@ func main() {
 func getConfig() (*Config, error) {
 	addr := flag.String("addr", ":25",
 		"address:port to listen on")
+	multi := flag.Bool("multi", false,
+		"read app tokens from the From: address")
 	authp := flag.String("auth", "",
 		"authenticate senders with username:password combinations from `file`")
 	oshost, err := os.Hostname()
@@ -283,7 +316,7 @@ func getConfig() (*Config, error) {
 		return nil, errors.New("must specify -tls-cert and -tls-key to use TLS")
 	}
 	token, ok := os.LookupEnv("PUSHOVER_TOKEN")
-	if !ok {
+	if !*multi && !ok {
 		return nil, errors.New("missing env: $PUSHOVER_TOKEN")
 	}
 
@@ -309,7 +342,8 @@ func getConfig() (*Config, error) {
 		Starttls:    *starttls,
 		StarttlsReq: *starttlsReq,
 
-		PushoverToken: token}, nil
+		AppToken:   token,
+		MultiToken: *multi}, nil
 }
 
 func readAuth(fd *os.File) (db map[string]string, err error) {
