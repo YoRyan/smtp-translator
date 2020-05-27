@@ -292,7 +292,7 @@ func main() {
 func getConfig() (*Config, error) {
 	addr := flag.String("addr", ":25",
 		"address:port to listen on")
-	multi := flag.Bool("multi", false,
+	multi := flag.Bool("multiapp", false,
 		"read app tokens from the From: address")
 	authp := flag.String("auth", "",
 		"authenticate senders with username:password combinations from `file`")
