@@ -167,6 +167,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
 			if err != nil {
+				errl.Println("malformed email message:", err)
 				return
 			}
 			for _, rcpt := range to {
