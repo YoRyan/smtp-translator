@@ -44,6 +44,12 @@ import (
 	"github.com/mhale/smtpd"
 )
 
+// Pushover API limits per https://pushover.net/api#limits
+const MaxEmailLength = 1024
+const MaxTitleLength = 250
+const MaxUrlLength = 512
+const MaxUrlTitleLength = 100
+
 // An Envelope represents an email that is finalized, parsed, and ready for
 // submission.
 type Envelope struct {
@@ -100,8 +106,8 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		title = sub
 	}
 	push := &pushover.Message{
-		Message:    string(body),
-		Title:      title,
+		Message:    truncate(string(body), MaxEmailLength),
+		Title:      truncate(title, MaxTitleLength),
 		Priority:   e.To.Priority,
 		DeviceName: e.To.Device,
 		Sound:      e.To.Sound,
@@ -113,6 +119,14 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 	}
 	retryable = false
 	return
+}
+
+func truncate(s string, maxLength int) string {
+	if len(s) >= maxLength {
+		return s[0:maxLength-4] + "..."
+	} else {
+		return s
+	}
 }
 
 // Config holds all parameters for SMTP Translator.
@@ -138,7 +152,6 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 		Appname:      "SMTP-Translator",
 		AuthRequired: len(c.AuthDb) > 0,
 		Hostname:     c.Hostname,
-		MaxSize:      1024 * 4, // per https://pushover.net/api#limits
 		TLSListener:  !c.Starttls && !c.StarttlsReq,
 		TLSRequired:  c.StarttlsReq,
 		AuthHandler: func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
