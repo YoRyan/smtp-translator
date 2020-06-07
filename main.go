@@ -109,7 +109,7 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		Priority:   e.To.Priority,
 		DeviceName: e.To.Device,
 		Sound:      e.To.Sound,
-	}
+		HTML:       true}
 	resp, err := api.SendMessage(push, rcpt)
 	if err != nil {
 		retryable = resp != nil && resp.Status != 1
