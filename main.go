@@ -32,6 +32,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
+	"mime"
 	"net"
 	"net/mail"
 	"os"
@@ -79,15 +80,6 @@ type Recipient struct {
 // of an error condition, retryable indicates whether or not the Envelope can be
 // resent.
 func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err error) {
-	sub := e.Msg.Header.Get("Subject")
-	if sub == "" {
-		sub = "(no subject)"
-	}
-	body, err := ioutil.ReadAll(e.Msg.Body)
-	if err != nil {
-		retryable = false
-		return
-	}
 	if e.From.AppToken == "" || e.To.UserToken == "" {
 		retryable = false
 		return
@@ -99,6 +91,11 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		return
 	}
 
+	sub, body := ParseMessage(e.Msg)
+	if sub == "" {
+		sub = "(no subject)"
+	}
+
 	var title string
 	if e.From.ShowAddress {
 		title = sub + " (" + e.From.Address + ")"
@@ -106,7 +103,7 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		title = sub
 	}
 	push := &pushover.Message{
-		Message:    truncate(string(body), MaxEmailLength),
+		Message:    truncate(body, MaxEmailLength),
 		Title:      truncate(title, MaxTitleLength),
 		Priority:   e.To.Priority,
 		DeviceName: e.To.Device,
@@ -118,6 +115,32 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		return
 	}
 	retryable = false
+	return
+}
+
+// ParseMessage extracts plaintext versions of the Message's subject and body,
+// as well as (in the near future) binary versions of any attachments.
+func ParseMessage(m *mail.Message) (subject string, body string) {
+	wordDec := new(mime.WordDecoder)
+
+	subjectRaw := m.Header.Get("Subject")
+	subject, err := wordDec.Decode(subjectRaw)
+	if err != nil {
+		subject = subjectRaw
+	}
+
+	bodyBytes, err := ioutil.ReadAll(m.Body)
+	var bodyRaw string
+	if err != nil {
+		bodyRaw = ""
+	} else {
+		bodyRaw = string(bodyBytes)
+	}
+	body, err = wordDec.Decode(bodyRaw)
+	if err != nil {
+		body = bodyRaw
+	}
+
 	return
 }
 
