@@ -54,9 +54,10 @@ const MaxUrlTitleLength = 100
 // An Envelope represents an email that is finalized, parsed, and ready for
 // submission.
 type Envelope struct {
-	From *Sender
-	To   *Recipient
-	Msg  *mail.Message
+	From    *Sender
+	To      *Recipient
+	Subject string
+	Body    string
 }
 
 // A Sender represents the source Pushover app token and the original email
@@ -91,19 +92,19 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		return
 	}
 
-	sub, body := ParseMessage(e.Msg)
+	sub := e.Subject
 	if sub == "" {
 		sub = "(no subject)"
 	}
-
 	var title string
 	if e.From.ShowAddress {
 		title = sub + " (" + e.From.Address + ")"
 	} else {
 		title = sub
 	}
+
 	push := &pushover.Message{
-		Message:    truncate(body, MaxEmailLength),
+		Message:    truncate(e.Body, MaxEmailLength),
 		Title:      truncate(title, MaxTitleLength),
 		Priority:   e.To.Priority,
 		DeviceName: e.To.Device,
@@ -115,32 +116,6 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		return
 	}
 	retryable = false
-	return
-}
-
-// ParseMessage extracts plaintext versions of the Message's subject and body,
-// as well as (in the near future) binary versions of any attachments.
-func ParseMessage(m *mail.Message) (subject string, body string) {
-	wordDec := new(mime.WordDecoder)
-
-	subjectRaw := m.Header.Get("Subject")
-	subject, err := wordDec.Decode(subjectRaw)
-	if err != nil {
-		subject = subjectRaw
-	}
-
-	bodyBytes, err := ioutil.ReadAll(m.Body)
-	var bodyRaw string
-	if err != nil {
-		bodyRaw = ""
-	} else {
-		bodyRaw = string(bodyBytes)
-	}
-	body, err = wordDec.Decode(bodyRaw)
-	if err != nil {
-		body = bodyRaw
-	}
-
 	return
 }
 
@@ -209,10 +184,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			for _, rcpt := range to {
 				parsedRcpt := parseRecipient(rcpt)
 				if parsedRcpt.UserToken != "" {
-					q <- &Envelope{
-						From: parsedSndr,
-						To:   parsedRcpt,
-						Msg:  msg}
+					q <- makeEnvelope(parsedSndr, parsedRcpt, msg)
 				} else {
 					errl.Println("bad address:", rcpt)
 				}
@@ -310,6 +282,36 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	}
 
 	return
+}
+
+// makeEnvelope extracts plaintext versions of the Message's subject and body,
+// as well as (in the near future) binary versions of any attachments.
+func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message) *Envelope {
+	wordDec := new(mime.WordDecoder)
+
+	subjectRaw := m.Header.Get("Subject")
+	subject, err := wordDec.Decode(subjectRaw)
+	if err != nil {
+		subject = subjectRaw
+	}
+
+	bodyBytes, err := ioutil.ReadAll(m.Body)
+	var bodyRaw string
+	if err != nil {
+		bodyRaw = ""
+	} else {
+		bodyRaw = string(bodyBytes)
+	}
+	body, err := wordDec.Decode(bodyRaw)
+	if err != nil {
+		body = bodyRaw
+	}
+
+	return &Envelope{
+		From:    sndr,
+		To:      rcpt,
+		Subject: subject,
+		Body:    body}
 }
 
 func findStringSubmatch(re string, s string) []string {
