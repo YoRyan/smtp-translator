@@ -14,7 +14,7 @@ You may also insert the following flags directly after your user token to furthe
 
 For example, sending an email to `uQiRzpo4DXghDmr9QzzfQu27cmVRsG>phone!incoming@pushover.net` will route the notification to your `phone` device and play the `incoming` sound.
 
-If the email contains an image attachment that is within Pushover's 2.5 MB limit, SMTP Translator will attach it to the Pushover notification.
+If the email contains an image attachment that is within Pushover's 2.5 MB [limit](https://pushover.net/api#attachments), SMTP Translator will attach it to the Pushover notification.
 
 Please note that with SMTP Translator as your sole smarthost, your system will not be able to send email to non-Pushover destinations.
 
