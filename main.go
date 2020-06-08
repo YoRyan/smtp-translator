@@ -314,8 +314,8 @@ func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logg
 				switch encoding := part.Header.Get("Content-Transfer-Encoding"); encoding {
 				case "base64":
 					buf := make([]byte, len(bytes))
-					if _, err := base64.StdEncoding.Decode(buf, bytes); err == nil {
-						attachment = buf
+					if nbytes, err := base64.StdEncoding.Decode(buf, bytes); err == nil {
+						attachment = buf[0:nbytes]
 					} else {
 						errl.Println("multipart base64 decode failed")
 					}
