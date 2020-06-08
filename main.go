@@ -27,12 +27,15 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"flag"
+	"io"
 	"io/ioutil"
 	"log"
 	"mime"
+	"mime/multipart"
 	"net"
 	"net/mail"
 	"os"
@@ -50,14 +53,16 @@ const MaxEmailLength = 1024
 const MaxTitleLength = 250
 const MaxUrlLength = 512
 const MaxUrlTitleLength = 100
+const MaxAttachmentSize = 2621440
 
 // An Envelope represents an email that is finalized, parsed, and ready for
 // submission.
 type Envelope struct {
-	From    *Sender
-	To      *Recipient
-	Subject string
-	Body    string
+	From       *Sender
+	To         *Recipient
+	Subject    string
+	Body       string
+	Attachment []byte
 }
 
 // A Sender represents the source Pushover app token and the original email
@@ -92,15 +97,16 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		return
 	}
 
-	sub := e.Subject
-	if sub == "" {
-		sub = "(no subject)"
+	validAttachment := e.Attachment != nil && len(e.Attachment) <= MaxAttachmentSize
+	title := e.Subject
+	if title == "" {
+		title = "(no subject)"
 	}
-	var title string
 	if e.From.ShowAddress {
-		title = sub + " (" + e.From.Address + ")"
-	} else {
-		title = sub
+		title += " (" + e.From.Address + ")"
+	}
+	if e.Attachment != nil && !validAttachment {
+		title += " (attachment too large)"
 	}
 
 	push := &pushover.Message{
@@ -110,6 +116,9 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		DeviceName: e.To.Device,
 		Sound:      e.To.Sound,
 		HTML:       true}
+	if validAttachment {
+		push.AddAttachment(bytes.NewBuffer(e.Attachment))
+	}
 	resp, err := api.SendMessage(push, rcpt)
 	if err != nil {
 		retryable = resp != nil && resp.Status != 1
@@ -184,7 +193,7 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			for _, rcpt := range to {
 				parsedRcpt := parseRecipient(rcpt)
 				if parsedRcpt.UserToken != "" {
-					q <- makeEnvelope(parsedSndr, parsedRcpt, msg)
+					q <- makeEnvelope(parsedSndr, parsedRcpt, msg, errl)
 				} else {
 					errl.Println("bad address:", rcpt)
 				}
@@ -284,34 +293,65 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	return
 }
 
-// makeEnvelope extracts plaintext versions of the Message's subject and body,
-// as well as (in the near future) binary versions of any attachments.
-func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message) *Envelope {
-	wordDec := new(mime.WordDecoder)
+// makeEnvelope extracts plaintext versions of the Message's subject and body
+// as well as the binary version of the attachment, if any.
+func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logger) *Envelope {
+	contentType := m.Header.Get("Content-Type")
+	mediaType, params, _ := mime.ParseMediaType(contentType)
 
-	subjectRaw := m.Header.Get("Subject")
-	subject, err := wordDec.Decode(subjectRaw)
-	if err != nil {
-		subject = subjectRaw
-	}
-
-	bodyBytes, err := ioutil.ReadAll(m.Body)
-	var bodyRaw string
-	if err != nil {
-		bodyRaw = ""
+	var body string
+	var attachment []byte
+	if strings.HasPrefix(mediaType, "multipart/") {
+		mr := multipart.NewReader(m.Body, params["boundary"])
+		for {
+			part, err := mr.NextPart()
+			if err != nil {
+				break
+			}
+			if strings.HasPrefix(part.Header.Get("Content-Type"), "text/") {
+				body = decodeIfEncoded(readAllAsString(part))
+			} else if bytes, err := ioutil.ReadAll(part); err == nil {
+				switch encoding := part.Header.Get("Content-Transfer-Encoding"); encoding {
+				case "base64":
+					buf := make([]byte, len(bytes))
+					if _, err := base64.StdEncoding.Decode(buf, bytes); err == nil {
+						attachment = buf
+					} else {
+						errl.Println("multipart base64 decode failed")
+					}
+				default:
+					errl.Println("unknown multipart encoding:", encoding)
+				}
+			}
+		}
 	} else {
-		bodyRaw = string(bodyBytes)
-	}
-	body, err := wordDec.Decode(bodyRaw)
-	if err != nil {
-		body = bodyRaw
+		body = decodeIfEncoded(readAllAsString(m.Body))
 	}
 
 	return &Envelope{
-		From:    sndr,
-		To:      rcpt,
-		Subject: subject,
-		Body:    body}
+		From:       sndr,
+		To:         rcpt,
+		Subject:    decodeIfEncoded(m.Header.Get("Subject")),
+		Body:       body,
+		Attachment: attachment}
+}
+
+func decodeIfEncoded(s string) string {
+	if match, _ := regexp.MatchString(`^\s*=\?[^\?]+\?[bBqQ]\?[^\?]+\?=\s*$`, s); match {
+		if res, err := new(mime.WordDecoder).Decode(s); err != nil {
+			return res
+		}
+		return s
+	}
+	return s
+}
+
+func readAllAsString(r io.Reader) string {
+	bytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
 }
 
 func findStringSubmatch(re string, s string) []string {
