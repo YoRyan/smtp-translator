@@ -308,9 +308,14 @@ func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logg
 			if err != nil {
 				break
 			}
-			if strings.HasPrefix(part.Header.Get("Content-Type"), "text/") {
+			contentType := part.Header.Get("Content-Type")
+			if strings.HasPrefix(contentType, "text/") {
 				body = decodeIfEncoded(readAllAsString(part))
-			} else if bytes, err := ioutil.ReadAll(part); err == nil {
+			} else if strings.HasPrefix(contentType, "image/") {
+				bytes, err := ioutil.ReadAll(part)
+				if err != nil {
+					continue
+				}
 				switch encoding := part.Header.Get("Content-Transfer-Encoding"); encoding {
 				case "base64":
 					buf := make([]byte, len(bytes))

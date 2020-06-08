@@ -18,7 +18,7 @@ message['Subject'] = 'Test email'
 
 message.attach(MIMEText('This email contains an attached image.', 'plain'))
 
-part = MIMEBase('application', 'octet-stream')
+part = MIMEBase('image', 'jpeg')
 FILE = 'BBridge.jpg'
 with open(FILE, 'rb') as attachment:
     part.set_payload(attachment.read())
