@@ -8,8 +8,8 @@ from os import environ
 from smtplib import SMTP
 
 
-sender = 'trump@whitehouse.gov'
-receiver = f'{environ["PUSHOVER_USER"]}@api.pushover.net'
+sender = 'ryan@youngryan.com'
+receiver = f'{environ["PUSHOVER_USER"]}@pushover.net'
 
 message = MIMEMultipart()
 message['From'] = sender

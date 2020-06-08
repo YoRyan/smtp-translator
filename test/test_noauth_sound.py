@@ -4,8 +4,8 @@ from os import environ
 from smtplib import SMTP
 
 
-sender = 'lance@bikeleague.org'
-receivers = [f'{environ["PUSHOVER_USER"]}!bike@api.pushover.net']
+sender = 'ryan@youngryan.com'
+receivers = [f'{environ["PUSHOVER_USER"]}!bike@pushover.net']
 
 message = """Subject: Test email
 

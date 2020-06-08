@@ -4,12 +4,12 @@ from os import environ
 from smtplib import SMTP
 
 
-sender = 'trump@whitehouse.gov'
-receivers = [f'{environ["PUSHOVER_USER"]}@api.pushover.net']
+sender = 'ryan@youngryan.com'
+receivers = [f'{environ["PUSHOVER_USER"]}@pushover.net']
 
 message = """Subject: Test email
 
-The quick brown fox jumps over the brown lazy dog.
+The quick brown fox jumps over the lazy dog.
 """
 
 with SMTP('localhost', 1587) as smtp:

@@ -4,8 +4,8 @@ from os import environ
 from smtplib import SMTP
 
 
-sender = f'{environ["PUSHOVER_APP"]}@api.pushover.net'
-receivers = [f'{environ["PUSHOVER_USER"]}@api.pushover.net']
+sender = f'{environ["PUSHOVER_APP"]}@pushover.net'
+receivers = [f'{environ["PUSHOVER_USER"]}@pushover.net']
 
 message = """Subject: Test email
 
