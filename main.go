@@ -79,6 +79,8 @@ type Recipient struct {
 	UserToken string
 	Device    string
 	Priority  int
+	RetrySec  int
+	ExpireSec int
 	Sound     string
 }
 
@@ -116,6 +118,12 @@ func SendPushover(e *Envelope, api *pushover.Pushover) (retryable bool, err erro
 		DeviceName: e.To.Device,
 		Sound:      e.To.Sound,
 		HTML:       true}
+	if e.To.RetrySec != 0 {
+		push.Retry = time.Duration(e.To.RetrySec) * time.Second
+	}
+	if e.To.ExpireSec != 0 {
+		push.Expire = time.Duration(e.To.ExpireSec) * time.Second
+	}
 	if validAttachment {
 		push.AddAttachment(bytes.NewBuffer(e.Attachment))
 	}
@@ -265,7 +273,7 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	var r Recipient
 	rcpt = &r
 
-	user := findStringSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+)*)@`, addr)
+	user := findStringSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+|@\d+|\$\d+)*)@`, addr)
 	if len(user) == 0 {
 		return
 	}
@@ -283,6 +291,16 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	priority := findStringSubmatch(`#([-\+]?\d)`, opts)
 	if len(priority) == 2 {
 		r.Priority, _ = strconv.Atoi(priority[1])
+	}
+
+	retry := findStringSubmatch(`@(\d+)`, opts)
+	if len(retry) == 2 {
+		r.RetrySec, _ = strconv.Atoi(retry[1])
+	}
+
+	expire := findStringSubmatch(`\$(\d+)`, opts)
+	if len(expire) == 2 {
+		r.ExpireSec, _ = strconv.Atoi(expire[1])
 	}
 
 	sound := findStringSubmatch(`!(\w+)`, opts)
