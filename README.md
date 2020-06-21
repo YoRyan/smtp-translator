@@ -24,7 +24,7 @@ further customize the notification:
   separators, multiple devices)
 * `#priority` to set the notification
   [priority](https://pushover.net/api#priority) (from -2 to 2)
-* `@retry` to set the retry interval for emergency priority notifications
+* `%retry` to set the retry interval for emergency priority notifications
 * `$expire` to set the expiration time for emergency priority notifications
 * `!sound` to set the notification [tone](https://pushover.net/api#sounds)
 

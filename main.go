@@ -273,7 +273,7 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	var r Recipient
 	rcpt = &r
 
-	user := findStringSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+|@\d+|\$\d+)*)@`, addr)
+	user := findStringSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+|%\d+|\$\d+)*)@`, addr)
 	if len(user) == 0 {
 		return
 	}
@@ -293,7 +293,7 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 		r.Priority, _ = strconv.Atoi(priority[1])
 	}
 
-	retry := findStringSubmatch(`@(\d+)`, opts)
+	retry := findStringSubmatch(`%(\d+)`, opts)
 	if len(retry) == 2 {
 		r.RetrySec, _ = strconv.Atoi(retry[1])
 	}
