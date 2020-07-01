@@ -327,7 +327,7 @@ func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logg
 				break
 			}
 			if strings.HasPrefix(part.Header.Get("Content-Type"), "text/") {
-				body = decodeIfEncoded(readAllAsString(part))
+				body = decodeIfEncoded(readAllAsString(part), errl)
 			} else if bytes, err := ioutil.ReadAll(part); err == nil {
 				switch encoding := part.Header.Get("Content-Transfer-Encoding"); encoding {
 				case "base64":
@@ -343,23 +343,25 @@ func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logg
 			}
 		}
 	} else {
-		body = decodeIfEncoded(readAllAsString(m.Body))
+		body = decodeIfEncoded(readAllAsString(m.Body), errl)
 	}
 
 	return &Envelope{
 		From:       sndr,
 		To:         rcpt,
-		Subject:    decodeIfEncoded(m.Header.Get("Subject")),
+		Subject:    decodeIfEncoded(m.Header.Get("Subject"), errl),
 		Body:       body,
 		Attachment: attachment}
 }
 
-func decodeIfEncoded(s string) string {
+func decodeIfEncoded(s string, errl *log.Logger) string {
 	if match, _ := regexp.MatchString(`^\s*=\?[^\?]+\?[bBqQ]\?[^\?]+\?=\s*$`, s); match {
 		if res, err := new(mime.WordDecoder).Decode(s); err != nil {
+			errl.Println("error decoding word:", err)
+			return s
+		} else {
 			return res
 		}
-		return s
 	}
 	return s
 }
