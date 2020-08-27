@@ -1,0 +1,4 @@
+github.com/gregdel/pushover v0.0.0-20200820121613-505cfd60a340 h1:8xJsWNRbxd16qzPWX+GEXN4ne0jIs1ydWcWZXruGcF8=
+github.com/gregdel/pushover v0.0.0-20200820121613-505cfd60a340/go.mod h1:EcaO66Nn1StkpEm1iKtBTV3d2A16SoMsVER1PthX7to=
+github.com/mhale/smtpd v0.0.0-20200509114310-d7a07f752336 h1:Rp+Y5NAgnPvY7FeVNPMRZdiEQzrHTw0cL+cK9AU1Gow=
+github.com/mhale/smtpd v0.0.0-20200509114310-d7a07f752336/go.mod h1:qqKwvL5sfYgFxcMy96Kjx3TCorMfDaQBvmEL2nvdidc=
