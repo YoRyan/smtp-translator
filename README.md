@@ -2,12 +2,19 @@
 
 # SMTP Translator
 
-[Pushover](https://pushover.net) is a fantastic service, but email notification
-via SMTP remains the standard for Unix daemons, Internet of Things, embedded
-devices, and so forth. SMTP Translator bridges the gap by receiving emails via
-SMTP and converting them into Pushover notifications, providing a simpler and
-more secure alternative to replicating your Gmail password on all of your
-systems.
+Have a software program, Linux server, IoT device, or embedded system that
+can only send old-fashioned email notifications?
+
+Now it can send [Pushover](https://pushover.net) notifications, too!
+
+![Android notification](https://raw.githubusercontent.com/wiki/YoRyan/smtp-translator/android_notify.jpg)
+
+SMTP Translator is a custom SMTP server that converts all emails it receives
+into Pushover notifications - a faster, simpler, and more contemporary
+alternative to email messages. (No more replicating your Gmail password to the
+email daemon on all of your Linux boxes!)
+
+## How to use
 
 To use SMTP Translator, just set your SMTP forwarder to
 `smtpt.app.youngryan.com` and send an email to `(your user key
@@ -39,11 +46,14 @@ to the Pushover notification.
 Please note that with SMTP Translator as your sole smarthost, your system will
 not be able to send email to non-Pushover destinations.
 
+## FAQ
+
 ##### Q: What's the catch?
 
 No catch. I promise that the code on this repository is what I run on my
-server, and that I do not log messages or metadata. If you like, of course, you
-are free to acquire your own app token and host your own instance.
+server, and that I do not log messages or metadata. But if you would prefer some
+more privacy, you are of course free to acquire your own app token and host your
+own instance.
 
 ##### Q: Does `smtpt.app.youngryan.com` support encryption?
 
@@ -61,8 +71,7 @@ end-to-end encrypted.
 ##### Q: Help! My message didn't go through!
 
 Double-check the token in your recipient address - it is easy to confuse an app
-token for a user or group token. And make sure your message is at most 1024
-characters long, per the Pushover [API limit](https://pushover.net/api#limits).
+token for a user or group token.
 
 ## Examples
 
@@ -99,12 +108,14 @@ Hello, World!
 
 ## Run your own
 
+First, install SMTP Translator into your `GOPATH`:
+
 ```
 $ go get -u github.com/YoRyan/smtp-translator
 ```
 
-At the minimum, you need to specify your Pushover app token in the
-`PUSHOVER_TOKEN` environment variable.
+To start the server, you need to specify the Pushover app token it will use. You
+do this by setting the `PUSHOVER_TOKEN` environment variable:
 
 ```
 $ export PUSHOVER_TOKEN=xxx
@@ -120,10 +131,10 @@ $ smtp-translator -addr 127.0.0.1:2525 -hostname My-Host-Not-Root
 ### Multiple app token mode
 
 Passing the `-multi` flag will instruct SMTP Translator to read the app token
-from the sender's email address instead of the environment variable. Thus, by
-setting the From: field to an email address in the form of `(your app token
-here)@pushover.net`, senders can specify their own app tokens. You do not need
-to set `PUSHOVER_TOKEN` in this mode.
+from the sender's email address instead of the environment variable. In this
+mode, all sender addresses must be in the form of `(app token)@pushover.net`.
+
+You do not need to set `PUSHOVER_TOKEN` in this mode.
 
 ### Enabling TLS
 
@@ -132,6 +143,10 @@ To quickly generate your own cert:
 ```
 $ openssl req -newkey rsa:4096 -nodes -sha512 -x509 -days 3650 -nodes -out mycert.pem -keyout mycert.key
 ```
+
+(This is self-signed, so production email clients will reject it by default.
+For an authentic certificate, request one from a service like
+[Let's Encrypt](https://letsencrypt.org).)
 
 There are three possible operating modes depending on whether you want to
 encrypt the entire session or kickstart unencrypted connections with STARTTLS -
@@ -154,7 +169,7 @@ credentials file, where each line represents an authorized login in the form of
 ```
 $ cat >mycreds.txt <<EOF
 ryan:hunter2
-trump:letmein
+einstein:letmein
 EOF
 $ chmod 600 mycreds.txt
 $ smtp-translator -addr :2525 -auth mycreds.txt
