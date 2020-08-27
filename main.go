@@ -49,11 +49,13 @@ import (
 )
 
 // Pushover API limits per https://pushover.net/api#limits
-const MaxEmailLength = 1024
-const MaxTitleLength = 250
-const MaxUrlLength = 512
-const MaxUrlTitleLength = 100
-const MaxAttachmentSize = 2621440
+const (
+	MaxEmailLength = 1024
+	MaxTitleLength = 250
+	MaxUrlLength = 512
+	MaxUrlTitleLength = 100
+	MaxAttachmentSize = 2621440
+)
 
 // An Envelope represents an email that is finalized, parsed, and ready for
 // submission.
