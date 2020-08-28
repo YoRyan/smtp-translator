@@ -12,7 +12,7 @@ Now it can send [Pushover](https://pushover.net) notifications, too!
 SMTP Translator is a custom SMTP server that converts all emails it receives
 into Pushover notifications - a faster, simpler, and more contemporary
 alternative to email messages. (No more replicating your Gmail password to the
-email daemon on all of your Linux boxes!)
+email daemons on all of your Linux boxes!)
 
 ## How to use
 
