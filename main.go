@@ -31,7 +31,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"flag"
-	"io"
 	"io/ioutil"
 	"log"
 	"mime"
@@ -50,9 +49,9 @@ import (
 
 // Pushover API limits per https://pushover.net/api#limits
 const (
-	MaxEmailLength = 1024
-	MaxTitleLength = 250
-	MaxUrlLength = 512
+	MaxEmailLength    = 1024
+	MaxTitleLength    = 250
+	MaxUrlLength      = 512
 	MaxUrlTitleLength = 100
 	MaxAttachmentSize = 2621440
 )
@@ -203,7 +202,11 @@ func ListenAndServe(c *Config, errl *log.Logger) error {
 			for _, rcpt := range to {
 				parsedRcpt := parseRecipient(rcpt)
 				if parsedRcpt.UserToken != "" {
-					q <- makeEnvelope(parsedSndr, parsedRcpt, msg, errl)
+					if env, err := makeEnvelope(parsedSndr, parsedRcpt, msg); err != nil {
+						errl.Println("error parsing message:", err)
+					} else {
+						q <- env
+					}
 				} else {
 					errl.Println("bad address:", rcpt)
 				}
@@ -263,7 +266,7 @@ func parseSender(addr string) (sndr *Sender) {
 	sndr = &s
 
 	s.Address = addr
-	app := findStringSubmatch(`(a\w+)@`, addr)
+	app := findSubmatch(`(a\w+)@`, addr)
 	if len(app) == 0 {
 		return
 	}
@@ -275,7 +278,7 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	var r Recipient
 	rcpt = &r
 
-	user := findStringSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+|%\d+|\$\d+)*)@`, addr)
+	user := findSubmatch(`^(u\w+)((?:>[\w,]+|#[-\+]?\d|!\w+|%\d+|\$\d+)*)@`, addr)
 	if len(user) == 0 {
 		return
 	}
@@ -285,27 +288,27 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 	}
 	opts := user[2]
 
-	device := findStringSubmatch(`>([\w,]+)`, opts)
+	device := findSubmatch(`>([\w,]+)`, opts)
 	if len(device) == 2 {
 		r.Device = device[1]
 	}
 
-	priority := findStringSubmatch(`#([-\+]?\d)`, opts)
+	priority := findSubmatch(`#([-\+]?\d)`, opts)
 	if len(priority) == 2 {
 		r.Priority, _ = strconv.Atoi(priority[1])
 	}
 
-	retry := findStringSubmatch(`%(\d+)`, opts)
+	retry := findSubmatch(`%(\d+)`, opts)
 	if len(retry) == 2 {
 		r.RetrySec, _ = strconv.Atoi(retry[1])
 	}
 
-	expire := findStringSubmatch(`\$(\d+)`, opts)
+	expire := findSubmatch(`\$(\d+)`, opts)
 	if len(expire) == 2 {
 		r.ExpireSec, _ = strconv.Atoi(expire[1])
 	}
 
-	sound := findStringSubmatch(`!(\w+)`, opts)
+	sound := findSubmatch(`!(\w+)`, opts)
 	if len(sound) == 2 {
 		r.Sound = sound[1]
 	}
@@ -315,12 +318,14 @@ func parseRecipient(addr string) (rcpt *Recipient) {
 
 // makeEnvelope extracts plaintext versions of the Message's subject and body
 // as well as the binary version of the attachment, if any.
-func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logger) *Envelope {
+func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message) (*Envelope, error) {
 	contentType := m.Header.Get("Content-Type")
 	mediaType, params, _ := mime.ParseMediaType(contentType)
 
-	var body string
-	var attachment []byte
+	var (
+		body       string
+		attachment []byte
+	)
 	if strings.HasPrefix(mediaType, "multipart/") {
 		mr := multipart.NewReader(m.Body, params["boundary"])
 		for {
@@ -329,54 +334,74 @@ func makeEnvelope(sndr *Sender, rcpt *Recipient, m *mail.Message, errl *log.Logg
 				break
 			}
 			if strings.HasPrefix(part.Header.Get("Content-Type"), "text/") {
-				body = decodeIfEncoded(readAllAsString(part), errl)
+				bodyb, err := ioutil.ReadAll(part)
+				if err != nil {
+					return nil, err
+				}
+				body, err = decodeAll(string(bodyb))
+				if err != nil {
+					return nil, err
+				}
 			} else if bytes, err := ioutil.ReadAll(part); err == nil {
 				switch encoding := part.Header.Get("Content-Transfer-Encoding"); encoding {
 				case "base64":
 					buf := make([]byte, len(bytes))
-					if nbytes, err := base64.StdEncoding.Decode(buf, bytes); err == nil {
-						attachment = buf[0:nbytes]
+					if nbytes, err := base64.StdEncoding.Decode(buf, bytes); err != nil {
+						return nil, err
 					} else {
-						errl.Println("multipart base64 decode failed")
+						attachment = buf[0:nbytes]
 					}
 				default:
-					errl.Println("unknown multipart encoding:", encoding)
+					return nil, errors.New("unknown multipart encoding " + encoding)
 				}
 			}
 		}
 	} else {
-		body = decodeIfEncoded(readAllAsString(m.Body), errl)
+		bodyb, err := ioutil.ReadAll(m.Body)
+		if err != nil {
+			return nil, err
+		}
+		if body, err = decodeAll(string(bodyb)); err != nil {
+			return nil, err
+		}
+	}
+
+	var (
+		sub string
+		err error
+	)
+	if sub, err = decodeAll(m.Header.Get("Subject")); err != nil {
+		return nil, err
 	}
 
 	return &Envelope{
 		From:       sndr,
 		To:         rcpt,
-		Subject:    decodeIfEncoded(m.Header.Get("Subject"), errl),
+		Subject:    sub,
 		Body:       body,
-		Attachment: attachment}
+		Attachment: attachment}, nil
 }
 
-func decodeIfEncoded(s string, errl *log.Logger) string {
-	if match, _ := regexp.MatchString(`^\s*=\?[^\?]+\?[bBqQ]\?[^\?]+\?=\s*$`, s); match {
-		if res, err := new(mime.WordDecoder).Decode(s); err != nil {
-			errl.Println("error decoding word:", err)
-			return s
+func decodeAll(s string) (string, error) {
+	re := regexp.MustCompile(`=\?[^\?]+\?[bBqQ]\?[^\?]+\?=`)
+	if m := re.FindStringIndex(s); len(m) >= 2 {
+		start := m[0]
+		end := m[1]
+		if d, err := new(mime.WordDecoder).Decode(s[start:end]); err != nil {
+			return "", err
 		} else {
-			return res
+			if rest, err := decodeAll(s[end:]); err != nil {
+				return "", err
+			} else {
+				return s[:start] + d + rest, nil
+			}
 		}
+	} else {
+		return s, nil
 	}
-	return s
 }
 
-func readAllAsString(r io.Reader) string {
-	bytes, err := ioutil.ReadAll(r)
-	if err != nil {
-		return ""
-	}
-	return string(bytes)
-}
-
-func findStringSubmatch(re string, s string) []string {
+func findSubmatch(re string, s string) []string {
 	return regexp.MustCompile(re).FindStringSubmatch(s)
 }
 
