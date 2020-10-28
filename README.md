@@ -17,7 +17,7 @@ email daemons on all of your Linux boxes!)
 ## How to use
 
 To use SMTP Translator, just set your SMTP forwarder to
-`smtpt.app.youngryan.com` and send an email to `(your user key
+`smtpt.youngryan.com` and send an email to `(your user key
 here)@pushover.net`. Then, instead of routing the email to Pushover via the
 conventional email network, SMTP Translator submits it directly to the Pushover
 API. You can make up any sender addresses you want, since they never touch the
@@ -55,7 +55,7 @@ server, and that I do not log messages or metadata. But if you would prefer some
 more privacy, you are of course free to acquire your own app token and host your
 own instance.
 
-##### Q: Does `smtpt.app.youngryan.com` support encryption?
+##### Q: Does `smtpt.youngryan.com` support encryption?
 
 Yes. To use TLS encryption, make note of the following table:
 
@@ -84,7 +84,22 @@ token for a user or group token.
 Run `dpkg-reconfigure exim4-config` and answer the following:
 
 - General type of mail configuration: "mail sent by smarthost; no local mail"
-- IP address or host name of the outgoing smarthost: "smtpt.app.youngryan.com::587"
+- IP address or host name of the outgoing smarthost: "smtpt.youngryan.com::587"
+
+```
+$ mailx -s 'Test Email' 'your.user.key.here@pushover.net'
+Hello, World!
+```
+
+### postfix
+
+```
+# cat >>/etc/postfix/main.cf
+relayhost = [smtpt.youngryan.com:587]
+smtp_tls_security_level = verify
+smtp_tls_mandatory_ciphers = high
+smtp_tls_verify_cert_match = hostname
+```
 
 ```
 $ mailx -s 'Test Email' 'your.user.key.here@pushover.net'
@@ -95,7 +110,7 @@ Hello, World!
 
 ```
 # cat >>/etc/mail/sendmail.mc; /etc/mail/make
-define(`SMART_HOST', `smtpt.app.youngryan.com')dnl
+define(`SMART_HOST', `smtpt.youngryan.com')dnl
 define(`RELAY_MAILER', `esmtp')dnl
 define(`RELAY_MAILER_ARGS', `TCP $h 587')dnl
 define(`confAUTH_MECHANISMS', `CRAM-MD5')dnl
