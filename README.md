@@ -11,8 +11,8 @@ Now it can send [Pushover](https://pushover.net) notifications, too!
 
 SMTP Translator is a custom SMTP server that converts all emails it receives
 into Pushover notifications - a faster, simpler, and more contemporary
-alternative to email messages. (No more replicating your Gmail password to the
-email daemons on all of your Linux boxes!)
+alternative to email messages. No more replicating your Gmail password to the
+email daemons on all of your Linux boxes!
 
 ## How to use
 
@@ -22,6 +22,11 @@ here)@pushover.net`. Then, instead of routing the email to Pushover via the
 conventional email network, SMTP Translator submits it directly to the Pushover
 API. You can make up any sender addresses you want, since they never touch the
 public email system.
+
+Please note that with SMTP Translator as your sole smarthost, your system will
+not be able to send email to non-Pushover destinations.
+
+### Pushover flags
 
 You may also insert the following flags directly after your user token to
 further customize the notification:
@@ -39,12 +44,11 @@ For example, sending an email to
 `uQiRzpo4DXghDmr9QzzfQu27cmVRsG>phone!incoming@pushover.net` will route the
 notification to your `phone` device and play the `incoming` sound.
 
+### Image attachments
+
 If the email contains an image attachment that is within Pushover's 2.5 MB
 [limit](https://pushover.net/api#attachments), SMTP Translator will attach it
 to the Pushover notification.
-
-Please note that with SMTP Translator as your sole smarthost, your system will
-not be able to send email to non-Pushover destinations.
 
 ## FAQ
 
@@ -73,7 +77,7 @@ end-to-end encrypted.
 Double-check the token in your recipient address - it is easy to confuse an app
 token for a user or group token.
 
-## Examples
+## Configuration examples
 
 ### Synology NAS
 
@@ -121,7 +125,7 @@ $ mailx -s 'Test Email' 'your.user.key.here@pushover.net'
 Hello, World!
 ```
 
-## Run your own
+## Run your own instance
 
 First, install SMTP Translator into your `GOPATH`:
 
@@ -142,6 +146,23 @@ Optionally, you can specify your own listening address and advertised hostname.
 ```
 $ smtp-translator -addr 127.0.0.1:2525 -hostname My-Host-Not-Root
 ```
+
+### Docker support
+
+SMTP Translator can be run inside Docker, and an official image is [available](https://hub.docker.com/r/yoryan/smtp-translator) from Docker Hub. This image listens on port 25. It will not run out of the box; you need to supply the `PUSHOVER_TOKEN` environment variable to get the daemon to start:
+
+```
+# docker pull yoryan/smtp-translator
+# docker run -e PUSHOVER_TOKEN=xxx -t yoryan/smtp-translator
+```
+
+To pass additional command-line arguments, use `/app/smtp-translator` as the binary path:
+
+```
+# docker run -it yoryan/smtp-translator /app/smtp-translator -help
+```
+
+If you want to enable TLS when running SMTP Translator inside a Docker container, you will need to use [bind mounts](https://docs.docker.com/storage/bind-mounts/) to supply the certificate files.
 
 ### Multiple app token mode
 
