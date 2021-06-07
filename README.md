@@ -2,29 +2,48 @@
 
 # SMTP Translator
 
-Have a software program, Linux server, IoT device, or embedded system that
-can only send old-fashioned email notifications?
-
-Now it can send [Pushover](https://pushover.net) notifications, too!
+SMTP Translator is a custom SMTP server that converts all emails it receives
+into [Pushover](https://pushover.net) notifications - a faster, simpler, and
+more contemporary alternative to email messages. No more replicating your Gmail
+password to the email daemons on all of your Linux boxes!
 
 ![Android notification](https://raw.githubusercontent.com/wiki/YoRyan/smtp-translator/android_notify.jpg)
 
-SMTP Translator is a custom SMTP server that converts all emails it receives
-into Pushover notifications - a faster, simpler, and more contemporary
-alternative to email messages. No more replicating your Gmail password to the
-email daemons on all of your Linux boxes!
-
 ## How to use
 
-To use SMTP Translator, just set your SMTP forwarder to
-`smtpt.youngryan.com` and send an email to `(your user key
-here)@pushover.net`. Then, instead of routing the email to Pushover via the
-conventional email network, SMTP Translator submits it directly to the Pushover
-API. You can make up any sender addresses you want, since they never touch the
-public email system.
+With an SMTP Translator instance set as your SMTP relay, send an email to `(your
+user key here)@pushover.net`. Then, instead of routing the email to Pushover via
+the conventional email network, SMTP Translator submits it directly to the
+Pushover API. You can make up any sender addresses you want, since they never
+touch the public email system.
 
 Please note that with SMTP Translator as your sole smarthost, your system will
 not be able to send email to non-Pushover destinations.
+
+As of June 6, 2021, the demo server formerly available at smtpt.youngryan.com
+has been discontinued.
+
+## Run your own instance
+
+First, install SMTP Translator into your `GOPATH`:
+
+```
+$ go get -u github.com/YoRyan/smtp-translator
+```
+
+To start the server, you need to specify the Pushover app token it will use. You
+do this by setting the `PUSHOVER_TOKEN` environment variable:
+
+```
+$ export PUSHOVER_TOKEN=xxx
+$ sudo smtp-translator
+```
+
+Optionally, you can specify your own listening address and advertised hostname.
+
+```
+$ smtp-translator -addr 127.0.0.1:2525 -hostname My-Host-Not-Root
+```
 
 ### Pushover flags
 
@@ -123,28 +142,6 @@ define(`confAUTH_MECHANISMS', `CRAM-MD5')dnl
 ```
 $ mailx -s 'Test Email' 'your.user.key.here@pushover.net'
 Hello, World!
-```
-
-## Run your own instance
-
-First, install SMTP Translator into your `GOPATH`:
-
-```
-$ go get -u github.com/YoRyan/smtp-translator
-```
-
-To start the server, you need to specify the Pushover app token it will use. You
-do this by setting the `PUSHOVER_TOKEN` environment variable:
-
-```
-$ export PUSHOVER_TOKEN=xxx
-$ sudo smtp-translator
-```
-
-Optionally, you can specify your own listening address and advertised hostname.
-
-```
-$ smtp-translator -addr 127.0.0.1:2525 -hostname My-Host-Not-Root
 ```
 
 ### Docker support
