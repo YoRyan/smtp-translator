@@ -7,6 +7,10 @@ into [Pushover](https://pushover.net) notifications - a faster, simpler, and
 more contemporary alternative to email messages. No more replicating your Gmail
 password to the email daemons on all of your Linux boxes!
 
+SMTP Translator has been succeeded by my [Mailrise](https://mailrise.xyz)
+project, which can push to practically any service - not just Pushover - using
+the [Apprise](https://github.com/caronc/apprise) library.
+
 ![Android notification](https://raw.githubusercontent.com/wiki/YoRyan/smtp-translator/android_notify.jpg)
 
 ## How to use
